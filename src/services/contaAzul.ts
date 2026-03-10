@@ -3,14 +3,9 @@ import path from 'path';
 import axios from 'axios';
 import crypto from 'crypto';
 
-const CLIENT_ID = process.env.CONTA_AZUL_CLIENT_ID || "";
-const CLIENT_SECRET = process.env.CONTA_AZUL_CLIENT_SECRET || "";
-
-// Em ambientes serverless (como Vercel), apenas a pasta /tmp tem permissão de escrita
-const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-const TOKENS_FILE = isVercel 
-  ? path.join('/tmp', 'tokens.json') 
-  : path.resolve(process.cwd(), 'tokens.json');
+const CLIENT_ID = "3tk2k5leko2ii1en59cd7tchvj";
+const CLIENT_SECRET = "1ufs4gqqqolu09s0l8nfto81fd7abdiki62p0k40obh0scll5s70";
+const TOKENS_FILE = path.resolve(process.cwd(), 'tokens.json');
 
 let tokens: any = null;
 
@@ -18,9 +13,6 @@ function loadTokens() {
   if (fs.existsSync(TOKENS_FILE)) {
     const data = fs.readFileSync(TOKENS_FILE, 'utf-8');
     tokens = JSON.parse(data);
-  } else if (process.env.CONTA_AZUL_REFRESH_TOKEN) {
-    // Fallback inicial caso o arquivo não exista, usando a variável de ambiente
-    tokens = { refresh_token: process.env.CONTA_AZUL_REFRESH_TOKEN };
   }
 }
 

@@ -1,29 +1,14 @@
-import fs from 'fs';
-import path from 'path';
 import axios from 'axios';
-import crypto from 'crypto';
 
-const CLIENT_ID = "3tk2k5leko2ii1en59cd7tchvj";
-const CLIENT_SECRET = "1ufs4gqqqolu09s0l8nfto81fd7abdiki62p0k40obh0scll5s70";
-const TOKENS_FILE = path.resolve(process.cwd(), 'tokens.json');
-
-let tokens: any = null;
-
-function loadTokens() {
-  if (fs.existsSync(TOKENS_FILE)) {
-    const data = fs.readFileSync(TOKENS_FILE, 'utf-8');
-    tokens = JSON.parse(data);
-  }
-}
-
-function saveTokens(newTokens: any) {
-  tokens = { ...tokens, ...newTokens };
-  fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf-8');
-}
+let currentAccessToken: string | null = null;
 
 async function refreshToken() {
-  if (!tokens || !tokens.refresh_token) {
-    throw new Error('No refresh token available');
+  const CLIENT_ID = process.env.CONTA_AZUL_CLIENT_ID;
+  const CLIENT_SECRET = process.env.CONTA_AZUL_CLIENT_SECRET;
+  const REFRESH_TOKEN = process.env.CONTA_AZUL_REFRESH_TOKEN;
+
+  if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
+    throw new Error('Conta Azul credentials (CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN) are missing in environment variables.');
   }
 
   const authHeader = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
@@ -32,7 +17,7 @@ async function refreshToken() {
     const response = await axios.post('https://auth.contaazul.com/oauth2/token', 
       new URLSearchParams({
         grant_type: 'refresh_token',
-        refresh_token: tokens.refresh_token,
+        refresh_token: REFRESH_TOKEN,
       }).toString(), 
       {
         headers: {
@@ -42,8 +27,8 @@ async function refreshToken() {
       }
     );
 
-    saveTokens(response.data);
-    return response.data.access_token;
+    currentAccessToken = response.data.access_token;
+    return currentAccessToken;
   } catch (error: any) {
     console.error('Error refreshing token:', error.response?.data || error.message);
     throw error;
@@ -51,7 +36,9 @@ async function refreshToken() {
 }
 
 async function request(method: string, url: string, params: any = {}) {
-  if (!tokens) loadTokens();
+  if (!currentAccessToken) {
+    await refreshToken();
+  }
 
   try {
     const response = await axios({
@@ -59,7 +46,7 @@ async function request(method: string, url: string, params: any = {}) {
       url: `https://api-v2.contaazul.com${url}`,
       params,
       headers: {
-        'Authorization': `Bearer ${tokens.access_token}`
+        'Authorization': `Bearer ${currentAccessToken}`
       }
     });
     return response.data;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { createClient } from 'redis';
 
-const KV_KEY = 'conta_azul_tokens';
+const KV_KEY = 'conta_azul_tokens_v2';
 
 let currentAccessToken: string | null = null;
 
@@ -13,22 +13,10 @@ const redisClient = createClient({
 redisClient.on('error', (err) => console.error('Redis Client Error', err));
 
 // Connect to Redis (we'll do this lazily when needed)
-let isRedisConnected = false;
-async function ensureRedisConnection() {
-  if (!isRedisConnected) {
-    try {
-      await redisClient.connect();
-      isRedisConnected = true;
-    } catch (e) {
-      console.error('Failed to connect to Redis:', e);
-    }
-  }
-}
-
 async function getStoredRefreshToken(): Promise<string> {
   // 1. Tenta ler do Redis primeiro
   try {
-    await ensureRedisConnection();
+    if (!redisClient.isOpen) await redisClient.connect();
     const dataStr = await redisClient.get(KV_KEY);
     if (dataStr) {
       const data = JSON.parse(dataStr.toString());
@@ -38,6 +26,10 @@ async function getStoredRefreshToken(): Promise<string> {
     }
   } catch (e) {
     console.error('Erro ao ler tokens do Redis:', e);
+  } finally {
+    if (redisClient.isOpen) {
+      try { await redisClient.disconnect(); } catch (e) {}
+    }
   }
   
   // 2. Se não tiver no Redis, usa a variável de ambiente (primeiro uso)
@@ -51,7 +43,7 @@ async function getStoredRefreshToken(): Promise<string> {
 async function saveTokens(accessToken: string, refreshToken: string) {
   currentAccessToken = accessToken;
   try {
-    await ensureRedisConnection();
+    if (!redisClient.isOpen) await redisClient.connect();
     await redisClient.set(KV_KEY, JSON.stringify({
       access_token: accessToken,
       refresh_token: refreshToken,
@@ -59,6 +51,10 @@ async function saveTokens(accessToken: string, refreshToken: string) {
     }));
   } catch (e) {
     console.error('Erro ao salvar tokens no Redis:', e);
+  } finally {
+    if (redisClient.isOpen) {
+      try { await redisClient.disconnect(); } catch (e) {}
+    }
   }
 }
 
@@ -106,7 +102,7 @@ async function request(method: string, url: string, params: any = {}) {
   // Tenta recuperar o access token do Redis se não estiver em memória
   if (!currentAccessToken) {
     try {
-      await ensureRedisConnection();
+      if (!redisClient.isOpen) await redisClient.connect();
       const dataStr = await redisClient.get(KV_KEY);
       if (dataStr) {
         const data = JSON.parse(dataStr.toString());
@@ -120,6 +116,10 @@ async function request(method: string, url: string, params: any = {}) {
       }
     } catch (e) {
       await refreshToken();
+    } finally {
+      if (redisClient.isOpen) {
+        try { await redisClient.disconnect(); } catch (e) {}
+      }
     }
   }
 

@@ -39,7 +39,7 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
-                            placeholder="admin ou bruno"
+                            placeholder="admin"
                             required
                         />
                     </div>
@@ -872,9 +872,13 @@ export default function App() {
                 const result = await response.json();
                 if (result.success) {
                     setApiData(result.dados);
+                } else {
+                    // Set apiData to show debug info even on error
+                    setApiData(result);
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Erro ao buscar dados", error);
+                setApiData({ debug: { errors: [`Erro de rede ou timeout: ${error.message}`], logs: [] } });
             } finally {
                 setLoading(false);
             }

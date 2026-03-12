@@ -31,7 +31,7 @@ async function getStoredRefreshToken(): Promise<string> {
     await ensureRedisConnection();
     const dataStr = await redisClient.get(KV_KEY);
     if (dataStr) {
-      const data = JSON.parse(dataStr);
+      const data = JSON.parse(dataStr.toString());
       if (data && data.refresh_token) {
         return data.refresh_token;
       }
@@ -109,7 +109,7 @@ async function request(method: string, url: string, params: any = {}) {
       await ensureRedisConnection();
       const dataStr = await redisClient.get(KV_KEY);
       if (dataStr) {
-        const data = JSON.parse(dataStr);
+        const data = JSON.parse(dataStr.toString());
         if (data && data.access_token) {
           currentAccessToken = data.access_token;
         } else {

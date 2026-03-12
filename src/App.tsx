@@ -3,8 +3,123 @@ import {
   Trophy, Filter, Wallet, Repeat, Scale, Users, BarChart, 
   Store, DollarSign, Tag, Megaphone, Award, UserPlus, Coins, Clock, TrendingUp,
   Calendar, Calculator, TrendingDown, Activity, Loader2, ArrowDown, Layout, 
-  X, History, FileText, CheckCircle, ArrowRightCircle, PackageX
+  X, History, FileText, CheckCircle, ArrowRightCircle, PackageX, LogIn, Terminal, Bug
 } from 'lucide-react';
+
+const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if ((username === 'admin' || username === 'bruno') && password === '123456') {
+            onLogin(username);
+        } else {
+            setError('Credenciais inválidas. Tente novamente.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900">
+            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex flex-col items-center mb-8">
+                    <div className="w-16 h-16 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-amber-600/30 text-3xl border border-amber-400/50 mb-4">
+                        B
+                    </div>
+                    <h1 className="text-2xl font-black tracking-tight text-gray-900">EXPANSÃO</h1>
+                    <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-[0.2em]">Painel de Controle Estratégico</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Usuário</label>
+                        <input 
+                            type="text" 
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                            placeholder="admin ou bruno"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Senha</label>
+                        <input 
+                            type="password" 
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                            placeholder="••••••"
+                            required
+                        />
+                    </div>
+                    
+                    {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
+
+                    <button 
+                        type="submit" 
+                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4"
+                    >
+                        <LogIn className="w-5 h-5" /> Entrar no Dashboard
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const ViewLogs = ({ apiData }: any) => {
+    const logs = apiData?.debug?.logs || [];
+    
+    return (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+            <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl text-gray-300 font-mono text-sm overflow-hidden flex flex-col h-[600px]">
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-800">
+                    <Terminal className="w-5 h-5 text-amber-500" />
+                    <h3 className="text-lg font-bold text-white">Log de Execução (Backend)</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
+                    {logs.length > 0 ? logs.map((log: string, idx: number) => (
+                        <div key={idx} className="border-l-2 border-gray-700 pl-3 py-1 hover:bg-gray-800/50 transition-colors">
+                            {log}
+                        </div>
+                    )) : (
+                        <div className="text-gray-500 italic">Nenhum log registrado na última requisição.</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ViewDebug = ({ apiData }: any) => {
+    const errors = apiData?.debug?.errors || [];
+    
+    return (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+            <div className="bg-red-50 p-6 rounded-2xl border border-red-100 shadow-sm text-red-900 font-mono text-sm overflow-hidden flex flex-col h-[600px]">
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-red-200">
+                    <Bug className="w-5 h-5 text-red-600" />
+                    <h3 className="text-lg font-bold text-red-800">Debug de Erros (Backend)</h3>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                    {errors.length > 0 ? errors.map((err: string, idx: number) => (
+                        <div key={idx} className="bg-white/60 p-3 rounded-lg border border-red-200 shadow-sm">
+                            {err}
+                        </div>
+                    )) : (
+                        <div className="flex flex-col items-center justify-center h-full text-green-600 gap-3">
+                            <CheckCircle className="w-12 h-12 opacity-50" />
+                            <span className="font-bold text-lg">Nenhum erro detectado!</span>
+                            <span className="text-green-600/70">As requisições ocorreram perfeitamente.</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const StatCard = ({ title, value, subtitle, trend, trendType, icon: Icon, highlight = false, tooltip, onClick }: any) => (
     <div 
@@ -683,6 +798,7 @@ const ViewPipeline = ({ apiData, formatBRL }: any) => {
 )};
 
 export default function App() {
+    const [user, setUser] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Resultado');
     const [apiData, setApiData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -749,7 +865,7 @@ export default function App() {
 
     useEffect(() => {
         async function fetchData() {
-            if (!startDate || !endDate) return;
+            if (!startDate || !endDate || !user) return;
             setLoading(true);
             try {
                 const response = await fetch(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`);
@@ -764,9 +880,9 @@ export default function App() {
             }
         }
         fetchData();
-    }, [startDate, endDate]); 
+    }, [startDate, endDate, user]); 
 
-    const tabs = [
+    let tabs = [
         { id: 'Resultado', icon: Trophy },
         { id: 'Funil', icon: Filter },
         { id: 'CAC', icon: Wallet },
@@ -775,6 +891,11 @@ export default function App() {
         { id: 'Time', icon: Users },
         { id: 'Pipeline', icon: BarChart },
     ];
+
+    if (user === 'bruno') {
+        tabs.push({ id: 'Log de execução', icon: Terminal });
+        tabs.push({ id: 'Debug', icon: Bug });
+    }
 
     const renderContent = () => {
         if (loading && !apiData) {
@@ -794,6 +915,8 @@ export default function App() {
             case 'Unit Eco': return <ViewUnitEconomics apiData={apiData} formatBRL={formatBRL} />;
             case 'Time': return <ViewTime apiData={apiData} formatBRL={formatBRL} />;
             case 'Pipeline': return <ViewPipeline apiData={apiData} formatBRL={formatBRL} />;
+            case 'Log de execução': return <ViewLogs apiData={apiData} />;
+            case 'Debug': return <ViewDebug apiData={apiData} />;
             default: return <ViewResultados apiData={apiData} formatBRL={formatBRL} daysInPeriod={daysInPeriod} />;
         }
     };
@@ -803,6 +926,10 @@ export default function App() {
             ? "text-[11px] bg-white text-amber-600 font-extrabold px-4 py-2 rounded-xl border-2 border-amber-400 shadow-md shadow-amber-500/10 whitespace-nowrap transition-all uppercase tracking-wider"
             : "text-[11px] bg-white text-gray-500 hover:text-gray-800 hover:bg-gray-50 font-bold px-4 py-2 rounded-xl border border-gray-200 whitespace-nowrap transition-colors uppercase tracking-wider shadow-sm hover:border-amber-200";
     };
+
+    if (!user) {
+        return <LoginScreen onLogin={setUser} />;
+    }
 
     return (
         <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8 w-full font-sans selection:bg-amber-100 selection:text-amber-900">
@@ -840,6 +967,12 @@ export default function App() {
                                 {tab.id}
                             </button>
                         ))}
+                        <button 
+                            onClick={() => setUser(null)}
+                            className="ml-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 transition-all duration-300"
+                        >
+                            Sair
+                        </button>
                     </div>
                 </div>
             </header>

@@ -10,21 +10,57 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/api/dashboard', async (req, res) => {
+  const debugLogs: string[] = [];
+  const debugErrors: string[] = [];
+  
+  const log = (msg: string) => {
+    console.log(msg);
+    debugLogs.push(`[${new Date().toISOString()}] ${msg}`);
+  };
+
+  const logError = (msg: string, err: any) => {
+    console.error(msg, err.response?.data || err);
+    debugErrors.push(`[${new Date().toISOString()}] ERROR: ${msg} - ${err?.message || err} ${err.response?.data ? JSON.stringify(err.response.data) : ''}`);
+  };
+
   try {
     const { startDate, endDate } = req.query;
+    log(`Buscando dados para o período: ${startDate} a ${endDate}`);
     
     // Ensure we only fetch from 2025 onwards as requested
     const minDate = '2025-01-01';
     const queryStart = startDate && startDate >= minDate ? startDate : minDate;
     const queryEnd = endDate || new Date().toISOString().split('T')[0];
 
-    const [rdData, contasReceber, contasPagar] = await Promise.all([
-      getDashboardData(queryStart as string, queryEnd as string),
-      getContasReceber(queryStart as string, queryEnd as string),
-      getContasPagar(queryStart as string, queryEnd as string)
-    ]);
+    log(`Iniciando requisições para RD Station e Conta Azul...`);
+    
+    let rdData = null;
+    let contasReceber = [];
+    let contasPagar = [];
+
+    try {
+      rdData = await getDashboardData(queryStart as string, queryEnd as string);
+      log(`Dados do RD Station carregados com sucesso.`);
+    } catch (e) {
+      logError(`Falha ao carregar dados do RD Station`, e);
+    }
+
+    try {
+      contasReceber = await getContasReceber(queryStart as string, queryEnd as string);
+      log(`Contas a Receber (Conta Azul) carregadas: ${contasReceber.length} registros.`);
+    } catch (e) {
+      logError(`Falha ao carregar Contas a Receber do Conta Azul`, e);
+    }
+
+    try {
+      contasPagar = await getContasPagar(queryStart as string, queryEnd as string);
+      log(`Contas a Pagar (Conta Azul) carregadas: ${contasPagar.length} registros.`);
+    } catch (e) {
+      logError(`Falha ao carregar Contas a Pagar do Conta Azul`, e);
+    }
 
     // --- Process Conta Azul Data ---
+    log(`Processando dados do Conta Azul...`);
     
     // 1. Receita Bruta & Taxa de Franquia Média
     const taxaFranquiaRecebimentos = contasReceber.filter(c => 
@@ -120,10 +156,12 @@ app.get('/api/dashboard', async (req, res) => {
       ? contasReceber.reduce((acc, curr) => acc + (curr.total || 0), 0) / contasReceber.length 
       : 0;
 
+    log(`Processamento concluído com sucesso.`);
+
     res.json({
       success: true,
       dados: {
-        ...rdData,
+        ...(rdData || {}),
         contaAzul: {
           receitaBruta,
           taxaFranquiaMedia,
@@ -136,12 +174,16 @@ app.get('/api/dashboard', async (req, res) => {
           comissoes,
           mediaRoyaltiesMensal,
           faturamentoMedio
+        },
+        debug: {
+            logs: debugLogs,
+            errors: debugErrors
         }
       }
     });
   } catch (error: any) {
     console.error("API Error:", error);
-    res.status(500).json({ error: 'Failed to fetch data', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch data', details: error.message, debug: { logs: debugLogs, errors: [...debugErrors, error.message] } });
   }
 });
 

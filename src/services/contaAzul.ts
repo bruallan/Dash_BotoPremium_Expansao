@@ -4,6 +4,7 @@ import { createClient } from 'redis';
 const KV_KEY = 'conta_azul_tokens_v2';
 
 let currentAccessToken: string | null = null;
+let tokenRefreshPromise: Promise<string> | null = null;
 
 // Helper to run a redis command with a fresh client
 async function withRedis<T>(operation: (client: any) => Promise<T>): Promise<T | null> {
@@ -16,19 +17,28 @@ async function withRedis<T>(operation: (client: any) => Promise<T>): Promise<T |
     const client = createClient({ 
       url: process.env.REDIS_URL,
       socket: {
-        connectTimeout: 2000
+        connectTimeout: 2000,
+        timeout: 2000
       }
     });
     client.on('error', (err) => console.error('Redis Client Error', err));
     
-    await client.connect();
-    const result = await operation(client);
-    
-    if (client.isOpen) {
-      try { await client.disconnect(); } catch (e) {}
-    }
-    
-    return result;
+    // Create a strict 3-second timeout for the entire Redis operation
+    const timeoutPromise = new Promise<null>((_, reject) => {
+      setTimeout(() => reject(new Error('Redis operation timed out')), 3000);
+    });
+
+    const redisOp = async () => {
+      await client.connect();
+      const result = await operation(client);
+      
+      if (client.isOpen) {
+        try { await client.disconnect(); } catch (e) {}
+      }
+      return result;
+    };
+
+    return await Promise.race([redisOp(), timeoutPromise]);
   } catch (e) {
     console.error('Redis operation failed:', e);
     return null;
@@ -73,43 +83,53 @@ async function saveTokens(accessToken: string, refreshToken: string) {
 }
 
 async function refreshToken() {
-  const CLIENT_ID = process.env.CONTA_AZUL_CLIENT_ID;
-  const CLIENT_SECRET = process.env.CONTA_AZUL_CLIENT_SECRET;
-  const REFRESH_TOKEN = await getStoredRefreshToken();
-
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    throw new Error('Conta Azul credentials (CLIENT_ID, CLIENT_SECRET) are missing.');
+  if (tokenRefreshPromise) {
+    return tokenRefreshPromise;
   }
 
-  const authHeader = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+  tokenRefreshPromise = (async () => {
+    try {
+      const CLIENT_ID = process.env.CONTA_AZUL_CLIENT_ID;
+      const CLIENT_SECRET = process.env.CONTA_AZUL_CLIENT_SECRET;
+      const REFRESH_TOKEN = await getStoredRefreshToken();
 
-  try {
-    const response = await axios.post('https://auth.contaazul.com/oauth2/token', 
-      new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: REFRESH_TOKEN,
-      }).toString(), 
-      {
-        headers: {
-          'Authorization': `Basic ${authHeader}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
+      if (!CLIENT_ID || !CLIENT_SECRET) {
+        throw new Error('Conta Azul credentials (CLIENT_ID, CLIENT_SECRET) are missing.');
       }
-    );
 
-    if (response.data.refresh_token) {
-      await saveTokens(response.data.access_token, response.data.refresh_token);
-    } else {
-      currentAccessToken = response.data.access_token;
-      // Se não veio refresh token novo, atualiza só o access token no KV mantendo o refresh antigo
-      await saveTokens(response.data.access_token, REFRESH_TOKEN);
+      const authHeader = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+
+      const response = await axios.post('https://auth.contaazul.com/oauth2/token', 
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: REFRESH_TOKEN,
+        }).toString(), 
+        {
+          headers: {
+            'Authorization': `Basic ${authHeader}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        }
+      );
+
+      if (response.data.refresh_token) {
+        await saveTokens(response.data.access_token, response.data.refresh_token);
+      } else {
+        currentAccessToken = response.data.access_token;
+        // Se não veio refresh token novo, atualiza só o access token no KV mantendo o refresh antigo
+        await saveTokens(response.data.access_token, REFRESH_TOKEN);
+      }
+      
+      return currentAccessToken!;
+    } catch (error: any) {
+      console.error('Error refreshing token:', error.response?.data || error.message);
+      throw error;
+    } finally {
+      tokenRefreshPromise = null;
     }
-    
-    return currentAccessToken;
-  } catch (error: any) {
-    console.error('Error refreshing token:', error.response?.data || error.message);
-    throw error;
-  }
+  })();
+
+  return tokenRefreshPromise;
 }
 
 async function request(method: string, url: string, params: any = {}) {
@@ -171,13 +191,17 @@ async function fetchAllPages(url: string, params: any = {}) {
   let allItems: any[] = [];
   let page = 1;
   let hasMore = true;
-  const BATCH_SIZE = 5; // Fetch 5 pages at a time
+  const BATCH_SIZE = 20; // Fetch 20 pages at a time
 
   while (hasMore) {
     const promises = [];
     for (let i = 0; i < BATCH_SIZE; i++) {
       promises.push(request('GET', url, { ...params, pagina: page + i, tamanho_pagina: 100 }).catch(e => {
-        console.error(`Error fetching page ${page + i}:`, e.message);
+        console.error(`Error fetching page ${page + i}:`, e.response?.data || e.message);
+        // If it's the very first page, throw the error so the caller knows the API failed completely
+        if (page === 1 && i === 0) {
+          throw e;
+        }
         return { items: [] }; // Return empty on error to not break the whole batch
       }));
     }

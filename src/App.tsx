@@ -637,7 +637,7 @@ const ViewPipeline = ({ apiData, formatBRL }: any) => {
     const [timelineData, setTimelineData] = useState<any[]>([]);
     const [loadingTimeline, setLoadingTimeline] = useState(false);
 
-    const leadsAtivos = apiData ? apiData.leads_ativos : 0;
+    const leadsAtivos = apiData?.leads_ativos || 0;
     
     const totalVendas = apiData?.vendas?.quantidade || 0;
     const leadsTotais = apiData?.leads_totais || 1; 

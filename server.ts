@@ -38,7 +38,14 @@ app.get('/api/dashboard', async (req, res) => {
     let contasReceber = [];
     let contasPagar = [];
 
-    try {
+    // Create a timeout promise that rejects after 8.5 seconds
+    // Vercel Hobby plan has a 10s timeout. We want to catch it before Vercel kills the process.
+    let timeoutId: NodeJS.Timeout;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Timeout interno: As APIs demoraram mais de 8.5 segundos para responder.')), 8500);
+    });
+
+    const fetchAllDataPromise = async () => {
       const [rdResult, receberResult, pagarResult] = await Promise.allSettled([
         getDashboardData(queryStart as string, queryEnd as string),
         getContasReceber(queryStart as string, queryEnd as string),
@@ -65,8 +72,14 @@ app.get('/api/dashboard', async (req, res) => {
       } else {
         logError(`Falha ao carregar Contas a Pagar do Conta Azul`, pagarResult.reason);
       }
+    };
+
+    try {
+      await Promise.race([fetchAllDataPromise(), timeoutPromise]);
+      clearTimeout(timeoutId!); // Clear timeout if fetch succeeds
     } catch (e) {
       logError(`Erro fatal ao executar requisições em paralelo`, e);
+      // We continue processing whatever data we managed to fetch (which might be empty)
     }
 
     // --- Process Conta Azul Data ---

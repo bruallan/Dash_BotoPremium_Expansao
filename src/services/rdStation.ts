@@ -14,19 +14,26 @@ async function fetchAllDeals(url: string) {
     
     if (total > 200) {
       const totalPages = Math.ceil(total / 200);
-      const promises = [];
+      const BATCH_SIZE = 20;
       
-      for (let p = 2; p <= totalPages; p++) {
-        promises.push(axios.get(`${url}&limit=200&page=${p}`));
+      for (let i = 2; i <= totalPages; i += BATCH_SIZE) {
+        const promises = [];
+        for (let j = 0; j < BATCH_SIZE && (i + j) <= totalPages; j++) {
+          promises.push(axios.get(`${url}&limit=200&page=${i + j}`).catch(e => {
+            console.error(`Error fetching page ${i + j}:`, e.message);
+            return { data: { deals: [] } };
+          }));
+        }
+        
+        const results = await Promise.all(promises);
+        results.forEach(res => {
+          if (res.data && res.data.deals) deals.push(...res.data.deals);
+        });
       }
-      
-      const results = await Promise.all(promises);
-      results.forEach(res => {
-        if (res.data.deals) deals.push(...res.data.deals);
-      });
     }
   } catch (error) {
     console.error('Error fetching deals:', error);
+    throw error; // Throw to caller so it can be logged in debug
   }
   
   return { deals, total };
@@ -85,28 +92,33 @@ export async function getDashboardData(startDate: string, endDate: string) {
   dealsVendasPeriodo.forEach((d: any) => { if (d.user?.id) usuariosMap.set(d.user.id, d.user.name); });
 
   const timeStats: Record<string, any> = {};
+  const usuariosArray = Array.from(usuariosMap.entries());
+  
+  // Process users in batches of 20 to avoid rate limits
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < usuariosArray.length; i += BATCH_SIZE) {
+    const batch = usuariosArray.slice(i, i + BATCH_SIZE);
+    
+    await Promise.all(batch.map(async ([userId, userName]) => {
+      let urlCriadosUser = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&user_id=${userId}&limit=1`;
+      let urlVendasUser = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&win=true&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&user_id=${userId}&limit=1`;
 
-  const consultasUsuarios = Array.from(usuariosMap.entries()).map(async ([userId, userName]) => {
-    let urlCriadosUser = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&user_id=${userId}&limit=1`;
-    let urlVendasUser = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&win=true&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&user_id=${userId}&limit=1`;
+      if (start && end) {
+        urlCriadosUser += `&created_at_period=true&start_date=${start}&end_date=${end}`;
+        urlVendasUser += `&closed_at_period=true&start_date=${start}&end_date=${end}`;
+      }
 
-    if (start && end) {
-      urlCriadosUser += `&created_at_period=true&start_date=${start}&end_date=${end}`;
-      urlVendasUser += `&closed_at_period=true&start_date=${start}&end_date=${end}`;
-    }
+      const [resCriados, resVendas] = await Promise.all([
+        axios.get(urlCriadosUser).catch(() => ({ data: { total: 0 } })),
+        axios.get(urlVendasUser).catch(() => ({ data: { total: 0 } }))
+      ]);
 
-    const [resCriados, resVendas] = await Promise.all([
-      axios.get(urlCriadosUser).catch(() => ({ data: { total: 0 } })),
-      axios.get(urlVendasUser).catch(() => ({ data: { total: 0 } }))
-    ]);
-
-    timeStats[userName as string] = {
-      leads: resCriados.data.total || 0,
-      vendas: resVendas.data.total || 0
-    };
-  });
-
-  await Promise.all(consultasUsuarios);
+      timeStats[userName as string] = {
+        leads: resCriados.data.total || 0,
+        vendas: resVendas.data.total || 0
+      };
+    }));
+  }
 
   const kanbanDeals: Record<string, any[]> = {};
   const stageCounts: Record<string, number> = {};

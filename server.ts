@@ -39,24 +39,34 @@ app.get('/api/dashboard', async (req, res) => {
     let contasPagar = [];
 
     try {
-      rdData = await getDashboardData(queryStart as string, queryEnd as string);
-      log(`Dados do RD Station carregados com sucesso.`);
-    } catch (e) {
-      logError(`Falha ao carregar dados do RD Station`, e);
-    }
+      const [rdResult, receberResult, pagarResult] = await Promise.allSettled([
+        getDashboardData(queryStart as string, queryEnd as string),
+        getContasReceber(queryStart as string, queryEnd as string),
+        getContasPagar(queryStart as string, queryEnd as string)
+      ]);
 
-    try {
-      contasReceber = await getContasReceber(queryStart as string, queryEnd as string);
-      log(`Contas a Receber (Conta Azul) carregadas: ${contasReceber.length} registros.`);
-    } catch (e) {
-      logError(`Falha ao carregar Contas a Receber do Conta Azul`, e);
-    }
+      if (rdResult.status === 'fulfilled') {
+        rdData = rdResult.value;
+        log(`Dados do RD Station carregados com sucesso.`);
+      } else {
+        logError(`Falha ao carregar dados do RD Station`, rdResult.reason);
+      }
 
-    try {
-      contasPagar = await getContasPagar(queryStart as string, queryEnd as string);
-      log(`Contas a Pagar (Conta Azul) carregadas: ${contasPagar.length} registros.`);
+      if (receberResult.status === 'fulfilled') {
+        contasReceber = receberResult.value;
+        log(`Contas a Receber (Conta Azul) carregadas: ${contasReceber.length} registros.`);
+      } else {
+        logError(`Falha ao carregar Contas a Receber do Conta Azul`, receberResult.reason);
+      }
+
+      if (pagarResult.status === 'fulfilled') {
+        contasPagar = pagarResult.value;
+        log(`Contas a Pagar (Conta Azul) carregadas: ${contasPagar.length} registros.`);
+      } else {
+        logError(`Falha ao carregar Contas a Pagar do Conta Azul`, pagarResult.reason);
+      }
     } catch (e) {
-      logError(`Falha ao carregar Contas a Pagar do Conta Azul`, e);
+      logError(`Erro fatal ao executar requisições em paralelo`, e);
     }
 
     // --- Process Conta Azul Data ---
@@ -64,7 +74,7 @@ app.get('/api/dashboard', async (req, res) => {
     
     // 1. Receita Bruta & Taxa de Franquia Média
     const taxaFranquiaRecebimentos = contasReceber.filter(c => 
-      c.categorias && c.categorias.some((cat: any) => cat.nome.toLowerCase().includes('taxa de franquia'))
+      c.categorias && Array.isArray(c.categorias) && c.categorias.some((cat: any) => (cat.nome || '').toLowerCase().includes('taxa de franquia'))
     );
     
     const receitaBruta = taxaFranquiaRecebimentos.reduce((acc, curr) => acc + (curr.total || 0), 0);
@@ -114,13 +124,13 @@ app.get('/api/dashboard', async (req, res) => {
 
     // 4. Comissões de Venda
     const comissoesPagar = contasPagar.filter(c => 
-      c.categorias && c.categorias.some((cat: any) => cat.nome.toLowerCase().includes('comissões de vendedores') || cat.nome.toLowerCase().includes('comissoes de vendedores'))
+      c.categorias && Array.isArray(c.categorias) && c.categorias.some((cat: any) => (cat.nome || '').toLowerCase().includes('comissões de vendedores') || (cat.nome || '').toLowerCase().includes('comissoes de vendedores'))
     );
     const comissoes = comissoesPagar.reduce((acc, curr) => acc + (curr.total || 0), 0);
 
     // 5. Royalties
     const royaltiesRecebimentos = contasReceber.filter(c => 
-      c.categorias && c.categorias.some((cat: any) => cat.nome.toLowerCase().includes('royalties')) &&
+      c.categorias && Array.isArray(c.categorias) && c.categorias.some((cat: any) => (cat.nome || '').toLowerCase().includes('royalties')) &&
       (c.total || 0) >= 3036
     );
     
@@ -129,7 +139,7 @@ app.get('/api/dashboard', async (req, res) => {
     
     royaltiesRecebimentos.forEach(c => {
       const clienteId = c.cliente?.id || 'unknown';
-      const mes = c.data_competencia ? c.data_competencia.substring(0, 7) : c.data_vencimento.substring(0, 7);
+      const mes = c.data_competencia ? String(c.data_competencia).substring(0, 7) : (c.data_vencimento ? String(c.data_vencimento).substring(0, 7) : 'unknown');
       
       if (!royaltiesPorClienteMes[clienteId]) royaltiesPorClienteMes[clienteId] = new Set();
       royaltiesPorClienteMes[clienteId].add(mes);

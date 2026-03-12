@@ -5,19 +5,40 @@ const KV_KEY = 'conta_azul_tokens_v2';
 
 let currentAccessToken: string | null = null;
 
-// Initialize Redis client
-const redisClient = createClient({
-  url: process.env.REDIS_URL
-});
+// Helper to run a redis command with a fresh client
+async function withRedis<T>(operation: (client: any) => Promise<T>): Promise<T | null> {
+  if (!process.env.REDIS_URL) {
+    console.warn('REDIS_URL not set, skipping Redis operation');
+    return null;
+  }
+  
+  try {
+    const client = createClient({ 
+      url: process.env.REDIS_URL,
+      socket: {
+        connectTimeout: 2000
+      }
+    });
+    client.on('error', (err) => console.error('Redis Client Error', err));
+    
+    await client.connect();
+    const result = await operation(client);
+    
+    if (client.isOpen) {
+      try { await client.disconnect(); } catch (e) {}
+    }
+    
+    return result;
+  } catch (e) {
+    console.error('Redis operation failed:', e);
+    return null;
+  }
+}
 
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
-
-// Connect to Redis (we'll do this lazily when needed)
 async function getStoredRefreshToken(): Promise<string> {
   // 1. Tenta ler do Redis primeiro
   try {
-    if (!redisClient.isOpen) await redisClient.connect();
-    const dataStr = await redisClient.get(KV_KEY);
+    const dataStr = await withRedis(async (client) => await client.get(KV_KEY));
     if (dataStr) {
       const data = JSON.parse(dataStr.toString());
       if (data && data.refresh_token) {
@@ -26,10 +47,6 @@ async function getStoredRefreshToken(): Promise<string> {
     }
   } catch (e) {
     console.error('Erro ao ler tokens do Redis:', e);
-  } finally {
-    if (redisClient.isOpen) {
-      try { await redisClient.disconnect(); } catch (e) {}
-    }
   }
   
   // 2. Se não tiver no Redis, usa a variável de ambiente (primeiro uso)
@@ -43,18 +60,15 @@ async function getStoredRefreshToken(): Promise<string> {
 async function saveTokens(accessToken: string, refreshToken: string) {
   currentAccessToken = accessToken;
   try {
-    if (!redisClient.isOpen) await redisClient.connect();
-    await redisClient.set(KV_KEY, JSON.stringify({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      updated_at: new Date().toISOString()
-    }));
+    await withRedis(async (client) => {
+      await client.set(KV_KEY, JSON.stringify({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        updated_at: new Date().toISOString()
+      }));
+    });
   } catch (e) {
     console.error('Erro ao salvar tokens no Redis:', e);
-  } finally {
-    if (redisClient.isOpen) {
-      try { await redisClient.disconnect(); } catch (e) {}
-    }
   }
 }
 
@@ -102,8 +116,7 @@ async function request(method: string, url: string, params: any = {}) {
   // Tenta recuperar o access token do Redis se não estiver em memória
   if (!currentAccessToken) {
     try {
-      if (!redisClient.isOpen) await redisClient.connect();
-      const dataStr = await redisClient.get(KV_KEY);
+      const dataStr = await withRedis(async (client) => await client.get(KV_KEY));
       if (dataStr) {
         const data = JSON.parse(dataStr.toString());
         if (data && data.access_token) {
@@ -116,10 +129,6 @@ async function request(method: string, url: string, params: any = {}) {
       }
     } catch (e) {
       await refreshToken();
-    } finally {
-      if (redisClient.isOpen) {
-        try { await redisClient.disconnect(); } catch (e) {}
-      }
     }
   }
 
@@ -162,25 +171,31 @@ async function fetchAllPages(url: string, params: any = {}) {
   let allItems: any[] = [];
   let page = 1;
   let hasMore = true;
+  const BATCH_SIZE = 5; // Fetch 5 pages at a time
 
   while (hasMore) {
-    const data = await request('GET', url, { ...params, pagina: page, tamanho_pagina: 50 });
-    if (data.items) {
-      allItems = allItems.concat(data.items);
-      if (data.items.length < 50) {
+    const promises = [];
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      promises.push(request('GET', url, { ...params, pagina: page + i, tamanho_pagina: 100 }).catch(e => {
+        console.error(`Error fetching page ${page + i}:`, e.message);
+        return { items: [] }; // Return empty on error to not break the whole batch
+      }));
+    }
+    
+    const results = await Promise.all(promises);
+    
+    for (const data of results) {
+      const items = data.items || data.itens || [];
+      allItems = allItems.concat(items);
+      
+      if (items.length < 100) {
         hasMore = false;
-      } else {
-        page++;
+        break;
       }
-    } else if (data.itens) {
-      allItems = allItems.concat(data.itens);
-      if (data.itens.length < 50) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    } else {
-      hasMore = false;
+    }
+    
+    if (hasMore) {
+      page += BATCH_SIZE;
     }
   }
 

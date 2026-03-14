@@ -932,10 +932,17 @@ app.post("/api/dashboard/calculate", async (req, res) => {
   };
 
   try {
-    const { rdData, contasReceber, contasPagar } = req.body;
+    const { rdData, contasReceber, contasPagar, startDate, endDate } = req.body;
     log(`Processando dados do Conta Azul (${contasReceber.length} receber, ${contasPagar.length} pagar)...`);
 
-    // 1. Receita Bruta & Taxa de Franquia MÃ©dia
+    // Filtra contasReceber para o período atual (para as outras métricas que não são Taxa de Franquia)
+    const contasReceberPeriodo = contasReceber.filter((c: any) => {
+      const data = c.data_vencimento ? c.data_vencimento.split("T")[0] : (c.data_pagamento ? c.data_pagamento.split("T")[0] : "");
+      if (!data) return false;
+      return data >= startDate && data <= endDate;
+    });
+
+    // 1. Receita Bruta & Taxa de Franquia Média (Agrupado por Cliente - Data Zero)
     const taxaFranquiaRecebimentos = contasReceber.filter(
       (c: any) =>
         c.categorias &&
@@ -945,22 +952,34 @@ app.post("/api/dashboard/calculate", async (req, res) => {
         ),
     );
 
-    const receitaBruta = taxaFranquiaRecebimentos.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0);
-    const receitaBrutaExecutada = taxaFranquiaRecebimentos.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0);
-
-    const taxaFranquiaPorCliente: Record<string, number> = {};
-    const taxaFranquiaPorClienteExecutada: Record<string, number> = {};
+    const vendasAgrupadas: Record<string, { dataZero: string, total: number, pago: number }> = {};
+    
     taxaFranquiaRecebimentos.forEach((c: any) => {
       const clienteId = c.cliente?.id || "unknown";
-      taxaFranquiaPorCliente[clienteId] = (taxaFranquiaPorCliente[clienteId] || 0) + (c.total || 0);
-      taxaFranquiaPorClienteExecutada[clienteId] = (taxaFranquiaPorClienteExecutada[clienteId] || 0) + (c.pago || 0);
+      // Usamos a data de vencimento como referência para a competência da parcela
+      const dataVencimento = c.data_vencimento ? c.data_vencimento.split("T")[0] : "9999-12-31";
+      
+      if (!vendasAgrupadas[clienteId]) {
+        vendasAgrupadas[clienteId] = { dataZero: dataVencimento, total: 0, pago: 0 };
+      }
+      
+      vendasAgrupadas[clienteId].total += (c.total || 0);
+      vendasAgrupadas[clienteId].pago += (c.pago || 0);
+      
+      // A Data Zero é a data da parcela mais antiga
+      if (dataVencimento < vendasAgrupadas[clienteId].dataZero) {
+        vendasAgrupadas[clienteId].dataZero = dataVencimento;
+      }
     });
-    
-    const clientesTaxaFranquia = Object.values(taxaFranquiaPorCliente);
-    const taxaFranquiaMedia = clientesTaxaFranquia.length > 0 ? clientesTaxaFranquia.reduce((a: number, b: number) => a + b, 0) / clientesTaxaFranquia.length : 0;
-    
-    const clientesTaxaFranquiaExecutada = Object.values(taxaFranquiaPorClienteExecutada);
-    const taxaFranquiaMediaExecutada = clientesTaxaFranquiaExecutada.length > 0 ? clientesTaxaFranquiaExecutada.reduce((a: number, b: number) => a + b, 0) / clientesTaxaFranquiaExecutada.length : 0;
+
+    // Filtramos as vendas para manter apenas as que a "Data Zero" cai no período selecionado
+    const vendasNoPeriodo = Object.values(vendasAgrupadas).filter(v => v.dataZero >= startDate && v.dataZero <= endDate);
+
+    const receitaBruta = vendasNoPeriodo.reduce((acc, curr) => acc + curr.total, 0);
+    const receitaBrutaExecutada = vendasNoPeriodo.reduce((acc, curr) => acc + curr.pago, 0);
+
+    const taxaFranquiaMedia = vendasNoPeriodo.length > 0 ? receitaBruta / vendasNoPeriodo.length : 0;
+    const taxaFranquiaMediaExecutada = vendasNoPeriodo.length > 0 ? receitaBrutaExecutada / vendasNoPeriodo.length : 0;
 
     // 2. Investimento em Marketing
     const mktPagar = contasPagar.filter((c: any) => {
@@ -1028,7 +1047,7 @@ app.post("/api/dashboard/calculate", async (req, res) => {
     const comissoesExecutadas = comissoesPagar.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0);
 
     // 5. Royalties
-    const royaltiesRecebimentos = contasReceber.filter(
+    const royaltiesRecebimentos = contasReceberPeriodo.filter(
       (c: any) =>
         c.categorias &&
         Array.isArray(c.categorias) &&
@@ -1084,16 +1103,16 @@ app.post("/api/dashboard/calculate", async (req, res) => {
         ? somaMediasMensaisClientesExecutado / numClientesRoyalties
         : 0;
 
-    // 6. Faturamento MÃ©dio da Unidade
+    // 6. Faturamento Média da Unidade
     const faturamentoMedio =
-      contasReceber.length > 0
-        ? contasReceber.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0) /
-          contasReceber.length
+      contasReceberPeriodo.length > 0
+        ? contasReceberPeriodo.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0) /
+          contasReceberPeriodo.length
         : 0;
     const faturamentoMedioExecutado =
-      contasReceber.length > 0
-        ? contasReceber.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0) /
-          contasReceber.length
+      contasReceberPeriodo.length > 0
+        ? contasReceberPeriodo.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0) /
+          contasReceberPeriodo.length
         : 0;
 
     log(`Processamento concluÃ­do com sucesso.`);

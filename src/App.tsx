@@ -1166,8 +1166,10 @@ export default function App() {
                 setSyncState({ isSyncing: true, progress: 15, message: 'Buscando Contas a Receber (Conta Azul)...' });
                 
                 // 2. Buscar Contas a Receber (Paginado - Otimizado)
+                // Usamos uma data inicial fixa para pegar o histórico completo e agrupar parcelamentos corretamente
+                const historyStartDate = "2025-01-01";
                 let contasReceber: any[] = [];
-                const firstRecRes = await fetch(`/api/data/ca-receber?startDate=${startDate}&endDate=${endDate}&page=1`);
+                const firstRecRes = await fetch(`/api/data/ca-receber?startDate=${historyStartDate}&endDate=${endDate}&page=1`);
                 if (!firstRecRes.ok) throw new Error('Falha ao buscar Contas a Receber (Página 1)');
                 const firstRecResult = await firstRecRes.json();
                 const itemsRec1 = firstRecResult.data?.items || firstRecResult.data?.itens || [];
@@ -1179,7 +1181,7 @@ export default function App() {
                     for (let i = 2; i <= totalPagesRec; i += 4) {
                         const promises = [];
                         for (let j = 0; j < 4 && (i + j) <= totalPagesRec; j++) {
-                            promises.push(fetch(`/api/data/ca-receber?startDate=${startDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
+                            promises.push(fetch(`/api/data/ca-receber?startDate=${historyStartDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
                         }
                         const results = await Promise.all(promises);
                         results.forEach(res => {
@@ -1230,7 +1232,7 @@ export default function App() {
                 const calcRes = await fetch('/api/dashboard/calculate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rdData, contasReceber, contasPagar })
+                    body: JSON.stringify({ rdData, contasReceber, contasPagar, startDate, endDate })
                 });
                 
                 if (!calcRes.ok) throw new Error('Falha ao calcular métricas');

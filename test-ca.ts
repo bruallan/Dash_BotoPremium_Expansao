@@ -1,4 +1,4 @@
-import { getContasReceber } from './src/services/contaAzul.ts';
+import { getContasReceber } from './api/services/contaAzul.ts';
 import dotenv from 'dotenv';
 dotenv.config();
 

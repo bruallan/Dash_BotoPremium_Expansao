@@ -735,8 +735,8 @@ export async function getContasReceber(
   return fetchAllPages(
     "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
     {
-      data_recebimento_de: de,
-      data_recebimento_ate: ate,
+      data_vencimento_de: de,
+      data_vencimento_ate: ate,
       status: "RECEBIDO",
     },
     signal,
@@ -754,8 +754,8 @@ export async function getContasPagar(
   return fetchAllPages(
     "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
     {
-      data_pagamento_de: de,
-      data_pagamento_ate: ate,
+      data_vencimento_de: de,
+      data_vencimento_ate: ate,
       status: "PAGO",
     },
     signal,
@@ -775,8 +775,8 @@ export async function getContasReceberPage(
     "GET",
     "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
     {
-      data_recebimento_de: de,
-      data_recebimento_ate: ate,
+      data_vencimento_de: de,
+      data_vencimento_ate: ate,
       status: "RECEBIDO",
       pagina: page,
       tamanho_pagina: 50
@@ -798,8 +798,8 @@ export async function getContasPagarPage(
     "GET",
     "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
     {
-      data_pagamento_de: de,
-      data_pagamento_ate: ate,
+      data_vencimento_de: de,
+      data_vencimento_ate: ate,
       status: "PAGO",
       pagina: page,
       tamanho_pagina: 50

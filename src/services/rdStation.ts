@@ -75,6 +75,7 @@ export async function getDashboardData(
 
   let urlVendasPeriodo = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&win=true&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}`;
   let urlAtivos = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&win=null&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}`;
+  let urlTodosCriados = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}`;
   let urlLeadsGlobaisPeriodo = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&limit=1`;
   const urlVendasAno = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&win=true&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&closed_at_period=true&start_date=${startYear}&end_date=${endYear}&limit=1`;
 
@@ -82,12 +83,14 @@ export async function getDashboardData(
     urlVendasPeriodo += `&closed_at_period=true&start_date=${start}&end_date=${end}`;
     urlLeadsGlobaisPeriodo += `&created_at_period=true&start_date=${start}&end_date=${end}`;
     urlAtivos += `&created_at_period=true&start_date=${start}&end_date=${end}`;
+    urlTodosCriados += `&created_at_period=true&start_date=${start}&end_date=${end}`;
   }
 
-  const [dataVendasPeriodo, dataAtivos, resLeadsGlobais, resVendasAno] =
+  const [dataVendasPeriodo, dataAtivos, dataTodosCriados, resLeadsGlobais, resVendasAno] =
     await Promise.all([
       fetchAllDeals(urlVendasPeriodo, signal),
       fetchAllDeals(urlAtivos, signal),
+      fetchAllDeals(urlTodosCriados, signal),
       axios
         .get(urlLeadsGlobaisPeriodo, { timeout: 8000, signal })
         .catch(() => ({ data: { total: 0 } })),
@@ -98,53 +101,37 @@ export async function getDashboardData(
 
   const dealsVendasPeriodo = dataVendasPeriodo.deals;
   const dealsAtivos = dataAtivos.deals;
+  const dealsTodosCriados = dataTodosCriados.deals;
 
   const qtd_vendas = dataVendasPeriodo.total;
   const leads_ativos = dataAtivos.total;
   const leads_totais_periodo = resLeadsGlobais.data.total;
   const qtd_vendas_ano = resVendasAno.data.total;
 
-  const usuariosMap = new Map();
-  dealsAtivos.forEach((d: any) => {
-    if (d.user?.id) usuariosMap.set(d.user.id, d.user.name);
-  });
-  dealsVendasPeriodo.forEach((d: any) => {
-    if (d.user?.id) usuariosMap.set(d.user.id, d.user.name);
-  });
-
   const timeStats: Record<string, any> = {};
-  const usuariosArray = Array.from(usuariosMap.entries());
+  
+  // Map to store user names
+  const userNames: Record<string, string> = {};
 
-  // Process users in batches of 20 to avoid rate limits
-  const BATCH_SIZE = 20;
-  for (let i = 0; i < usuariosArray.length; i += BATCH_SIZE) {
-    const batch = usuariosArray.slice(i, i + BATCH_SIZE);
+  // Count everything locally from the fetched deals
+  dealsTodosCriados.forEach((d: any) => {
+    const userId = d.user?.id;
+    const userName = d.user?.name;
+    if (userId && userName) {
+      userNames[userId] = userName;
+      if (!timeStats[userName]) timeStats[userName] = { leads: 0, vendas: 0 };
+      timeStats[userName].leads++;
+    }
+  });
 
-    await Promise.all(
-      batch.map(async ([userId, userName]) => {
-        let urlCriadosUser = `https://crm.rdstation.com/api/v1/deals?token=${RD_TOKEN}&deal_pipeline_id=${ID_FUNIL_EXPANSAO_P9}&user_id=${userId}&limit=1`;
-
-        if (start && end) {
-          urlCriadosUser += `&created_at_period=true&start_date=${start}&end_date=${end}`;
-        }
-
-        const resCriados = await axios
-          .get(urlCriadosUser, { timeout: 8000, signal })
-          .catch(() => ({ data: { total: 0 } }));
-
-        // We already have all won deals for the period in dealsVendasPeriodo!
-        // No need to make an extra API request per user.
-        const vendasDoUsuario = dealsVendasPeriodo.filter(
-          (d: any) => d.user?.id === userId,
-        ).length;
-
-        timeStats[userName as string] = {
-          leads: resCriados.data.total || 0,
-          vendas: vendasDoUsuario,
-        };
-      }),
-    );
-  }
+  dealsVendasPeriodo.forEach((d: any) => {
+    const userId = d.user?.id;
+    const userName = d.user?.name || userNames[userId];
+    if (userId && userName) {
+      if (!timeStats[userName]) timeStats[userName] = { leads: 0, vendas: 0 };
+      timeStats[userName].vendas++;
+    }
+  });
 
   const kanbanDeals: Record<string, any[]> = {};
   const stageCounts: Record<string, number> = {};

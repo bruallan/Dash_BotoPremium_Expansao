@@ -10,6 +10,10 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [redisData, setRedisData] = useState<any>(null);
+    const [loadingRedis, setLoadingRedis] = useState(false);
+    const [tokenData, setTokenData] = useState<any>(null);
+    const [loadingToken, setLoadingToken] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -20,9 +24,35 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
         }
     };
 
+    const fetchRedisData = async () => {
+        setLoadingRedis(true);
+        try {
+            const res = await fetch('/api/debug/redis');
+            const data = await res.json();
+            setRedisData(data);
+        } catch (err: any) {
+            setRedisData({ error: err.message });
+        } finally {
+            setLoadingRedis(false);
+        }
+    };
+
+    const fetchTokenData = async () => {
+        setLoadingToken(true);
+        try {
+            const res = await fetch('/api/debug/check-token');
+            const data = await res.json();
+            setTokenData(data);
+        } catch (err: any) {
+            setTokenData({ error: err.message });
+        } finally {
+            setLoadingToken(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900">
-            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900">
+            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8">
                 <div className="flex flex-col items-center mb-8">
                     <div className="w-16 h-16 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-amber-600/30 text-3xl border border-amber-400/50 mb-4">
                         B
@@ -65,6 +95,50 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
                     </button>
                 </form>
             </div>
+
+            {/* Debug Redis Button - Só aparece se o usuário for "bruno" */}
+            {username.toLowerCase() === 'bruno' && (
+                <div className="w-full max-w-2xl bg-white p-6 rounded-3xl shadow-xl border border-gray-100 animate-in fade-in duration-500 space-y-4">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                        <h3 className="font-bold text-gray-800 flex items-center gap-2"><Terminal className="w-5 h-5 text-amber-600"/> Debug Tokens (Provisório)</h3>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={fetchTokenData}
+                                disabled={loadingToken}
+                                className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2"
+                            >
+                                {loadingToken ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bug className="w-4 h-4" />}
+                                Ver Token Atual
+                            </button>
+                            <button 
+                                onClick={fetchRedisData}
+                                disabled={loadingRedis}
+                                className="bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2"
+                            >
+                                {loadingRedis ? <Loader2 className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
+                                Ver Redis Completo
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {tokenData && (
+                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                            <h4 className="text-xs font-bold text-amber-800 mb-2 uppercase tracking-wider">Status do Token Lido pelo Backend:</h4>
+                            <pre className="text-amber-900 text-xs font-mono whitespace-pre-wrap">
+                                {JSON.stringify(tokenData, null, 2)}
+                            </pre>
+                        </div>
+                    )}
+
+                    {redisData && (
+                        <div className="bg-gray-900 p-4 rounded-xl overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
+                            <pre className="text-green-400 text-xs font-mono">
+                                {JSON.stringify(redisData, null, 2)}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -95,9 +169,157 @@ const ViewLogs = ({ apiData }: any) => {
 
 const ViewDebug = ({ apiData }: any) => {
     const errors = apiData?.debug?.errors || [];
-    
+    const [showRedisEditor, setShowRedisEditor] = useState(false);
+    const [redisKeys, setRedisKeys] = useState<Record<string, any>>({});
+    const [loading, setLoading] = useState(false);
+    const [editingKey, setEditingKey] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState<string>('');
+    const [saveStatus, setSaveStatus] = useState('');
+
+    const fetchRedis = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/debug/redis');
+            const data = await res.json();
+            if (data.success) {
+                setRedisKeys(data.data);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showRedisEditor) {
+            fetchRedis();
+        }
+    }, [showRedisEditor]);
+
+    const handleEdit = (key: string, value: any) => {
+        setEditingKey(key);
+        setEditValue(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+        setSaveStatus('');
+    };
+
+    const handleSave = async () => {
+        if (!editingKey) return;
+        setLoading(true);
+        setSaveStatus('Salvando...');
+        try {
+            if (editingKey === 'conta_azul_tokens_v2') {
+                try {
+                    JSON.parse(editValue);
+                } catch (e) {
+                    setSaveStatus('Erro: O valor precisa ser um JSON válido.');
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            const res = await fetch('/api/debug/redis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: editingKey, value: editValue })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSaveStatus('Salvo com sucesso!');
+                await fetchRedis();
+                setTimeout(() => {
+                    setEditingKey(null);
+                    setSaveStatus('');
+                }, 1500);
+            } else {
+                setSaveStatus('Erro: ' + data.error);
+            }
+        } catch (e: any) {
+            setSaveStatus('Erro: ' + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+            <div className="flex justify-end">
+                <button 
+                    onClick={() => setShowRedisEditor(!showRedisEditor)}
+                    className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-2 shadow-sm"
+                >
+                    <Terminal className="w-4 h-4" />
+                    {showRedisEditor ? 'Ocultar Editor Redis' : 'Trocar Chaves do Redis'}
+                </button>
+            </div>
+
+            {showRedisEditor && (
+                <div className="bg-white p-6 rounded-2xl border border-amber-200 shadow-lg">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Terminal className="w-5 h-5 text-amber-600" /> Editor do Redis
+                    </h3>
+                    
+                    {loading && Object.keys(redisKeys).length === 0 ? (
+                        <div className="flex items-center gap-2 text-amber-600"><Loader2 className="w-5 h-5 animate-spin"/> Carregando chaves...</div>
+                    ) : (
+                        <div className="space-y-4">
+                            {Object.entries(redisKeys).map(([key, value]) => (
+                                <div key={key} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="font-mono font-bold text-amber-700">{key}</span>
+                                        {editingKey !== key && (
+                                            <button 
+                                                onClick={() => handleEdit(key, value)}
+                                                className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-lg font-bold transition-colors"
+                                            >
+                                                Editar
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    {editingKey === key ? (
+                                        <div className="space-y-3 mt-3">
+                                            <textarea 
+                                                value={editValue}
+                                                onChange={(e) => setEditValue(e.target.value)}
+                                                className="w-full h-40 p-3 font-mono text-xs bg-gray-900 text-green-400 rounded-xl border border-gray-700 focus:ring-2 focus:ring-amber-500 outline-none"
+                                            />
+                                            <div className="flex items-center gap-3">
+                                                <button 
+                                                    onClick={handleSave}
+                                                    disabled={loading}
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2"
+                                                >
+                                                    {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle className="w-4 h-4"/>}
+                                                    Salvar Alterações
+                                                </button>
+                                                <button 
+                                                    onClick={() => { setEditingKey(null); setSaveStatus(''); }}
+                                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                {saveStatus && <span className={`text-sm font-bold ${saveStatus.includes('Erro') ? 'text-red-500' : 'text-green-600'}`}>{saveStatus}</span>}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <pre className="text-xs text-gray-600 bg-white p-3 rounded-lg border border-gray-200 overflow-x-auto">
+                                            {typeof value === 'object' ? JSON.stringify(value, null, 2) : value}
+                                        </pre>
+                                    )}
+                                </div>
+                            ))}
+                            
+                            {Object.keys(redisKeys).length === 0 && !loading && (
+                                <div className="text-gray-500 italic p-4 text-center border border-dashed border-gray-300 rounded-xl">
+                                    Nenhuma chave encontrada no Redis.
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="bg-red-50 p-6 rounded-2xl border border-red-100 shadow-sm text-red-900 font-mono text-sm overflow-hidden flex flex-col h-[600px]">
                 <div className="flex items-center gap-3 mb-4 pb-4 border-b border-red-200">
                     <Bug className="w-5 h-5 text-red-600" />
@@ -808,6 +1030,9 @@ export default function App() {
     const [daysInPeriod, setDaysInPeriod] = useState(30);
     const [activePreset, setActivePreset] = useState('allTime');
     
+    // NOVO ESTADO PARA PROGRESSO
+    const [syncState, setSyncState] = useState({ isSyncing: false, progress: 0, message: '' });
+    
     const todayStr = new Date().toISOString().split('T')[0];
 
     const formatBRL = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
@@ -866,23 +1091,107 @@ export default function App() {
     useEffect(() => {
         async function fetchData() {
             if (!startDate || !endDate || !user) return;
+            
             setLoading(true);
+            setSyncState({ isSyncing: true, progress: 5, message: 'Iniciando sincronização com RD Station...' });
+            
             try {
-                const response = await fetch(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`);
-                const result = await response.json();
-                if (result.success) {
-                    setApiData(result.dados);
+                // 1. Buscar RD Station
+                const rdRes = await fetch(`/api/data/rd?startDate=${startDate}&endDate=${endDate}`);
+                if (!rdRes.ok) throw new Error('Falha ao buscar dados do RD Station');
+                const rdResult = await rdRes.json();
+                const rdData = rdResult.data;
+                
+                setSyncState({ isSyncing: true, progress: 15, message: 'Buscando Contas a Receber (Conta Azul)...' });
+                
+                // 2. Buscar Contas a Receber (Paginado - Otimizado)
+                let contasReceber: any[] = [];
+                const firstRecRes = await fetch(`/api/data/ca-receber?startDate=${startDate}&endDate=${endDate}&page=1`);
+                if (!firstRecRes.ok) throw new Error('Falha ao buscar Contas a Receber (Página 1)');
+                const firstRecResult = await firstRecRes.json();
+                const itemsRec1 = firstRecResult.data?.items || firstRecResult.data?.itens || [];
+                const totalItemsRec = firstRecResult.data?.itens_totais || 0;
+                contasReceber = contasReceber.concat(itemsRec1);
+                
+                if (totalItemsRec > 50) {
+                    const totalPagesRec = Math.ceil(totalItemsRec / 50);
+                    for (let i = 2; i <= totalPagesRec; i += 4) {
+                        const promises = [];
+                        for (let j = 0; j < 4 && (i + j) <= totalPagesRec; j++) {
+                            promises.push(fetch(`/api/data/ca-receber?startDate=${startDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
+                        }
+                        const results = await Promise.all(promises);
+                        results.forEach(res => {
+                            const items = res.data?.items || res.data?.itens || [];
+                            contasReceber = contasReceber.concat(items);
+                        });
+                        const progress = 15 + Math.min(35, Math.round((contasReceber.length / totalItemsRec) * 35));
+                        setSyncState({ isSyncing: true, progress, message: `Baixando Contas a Receber: ${contasReceber.length} de ${totalItemsRec}...` });
+                        await new Promise(r => setTimeout(r, 300)); // Delay entre lotes
+                    }
                 } else {
-                    // Set apiData to show debug info even on error
-                    setApiData(result);
+                    setSyncState({ isSyncing: true, progress: 50, message: `Baixando Contas a Receber: ${contasReceber.length} de ${totalItemsRec}...` });
                 }
+
+                setSyncState({ isSyncing: true, progress: 50, message: 'Buscando Contas a Pagar (Conta Azul)...' });
+
+                // 3. Buscar Contas a Pagar (Paginado - Otimizado)
+                let contasPagar: any[] = [];
+                const firstPagRes = await fetch(`/api/data/ca-pagar?startDate=${startDate}&endDate=${endDate}&page=1`);
+                if (!firstPagRes.ok) throw new Error('Falha ao buscar Contas a Pagar (Página 1)');
+                const firstPagResult = await firstPagRes.json();
+                const itemsPag1 = firstPagResult.data?.items || firstPagResult.data?.itens || [];
+                const totalItemsPag = firstPagResult.data?.itens_totais || 0;
+                contasPagar = contasPagar.concat(itemsPag1);
+
+                if (totalItemsPag > 50) {
+                    const totalPagesPag = Math.ceil(totalItemsPag / 50);
+                    for (let i = 2; i <= totalPagesPag; i += 4) {
+                        const promises = [];
+                        for (let j = 0; j < 4 && (i + j) <= totalPagesPag; j++) {
+                            promises.push(fetch(`/api/data/ca-pagar?startDate=${startDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
+                        }
+                        const results = await Promise.all(promises);
+                        results.forEach(res => {
+                            const items = res.data?.items || res.data?.itens || [];
+                            contasPagar = contasPagar.concat(items);
+                        });
+                        const progress = 50 + Math.min(40, Math.round((contasPagar.length / totalItemsPag) * 40));
+                        setSyncState({ isSyncing: true, progress, message: `Baixando Contas a Pagar: ${contasPagar.length} de ${totalItemsPag}...` });
+                        await new Promise(r => setTimeout(r, 300)); // Delay entre lotes
+                    }
+                } else {
+                    setSyncState({ isSyncing: true, progress: 90, message: `Baixando Contas a Pagar: ${contasPagar.length} de ${totalItemsPag}...` });
+                }
+                setSyncState({ isSyncing: true, progress: 95, message: 'Calculando métricas financeiras...' });
+
+                // 4. Enviar para o backend calcular
+                const calcRes = await fetch('/api/dashboard/calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rdData, contasReceber, contasPagar })
+                });
+                
+                if (!calcRes.ok) throw new Error('Falha ao calcular métricas');
+                const calcResult = await calcRes.json();
+                
+                if (calcResult.success) {
+                    setApiData(calcResult.dados);
+                } else {
+                    setApiData(calcResult);
+                }
+                
+                setSyncState({ isSyncing: false, progress: 100, message: 'Concluído!' });
+
             } catch (error: any) {
                 console.error("Erro ao buscar dados", error);
                 setApiData({ debug: { errors: [`Erro de rede ou timeout: ${error.message}`], logs: [] } });
+                setSyncState({ isSyncing: false, progress: 0, message: `Erro: ${error.message}` });
             } finally {
                 setLoading(false);
             }
         }
+        
         fetchData();
     }, [startDate, endDate, user]); 
 
@@ -904,9 +1213,18 @@ export default function App() {
     const renderContent = () => {
         if (loading && !apiData) {
             return (
-                <div className="flex flex-col justify-center items-center h-[50vh] text-amber-600 gap-4">
-                    <Loader2 className="animate-spin w-10 h-10" /> 
-                    <p className="font-bold tracking-widest uppercase text-sm">Sincronizando dados...</p>
+                <div className="flex flex-col justify-center items-center h-[50vh] text-amber-600 gap-6">
+                    <Loader2 className="animate-spin w-12 h-12" /> 
+                    <div className="text-center w-full max-w-md">
+                        <p className="font-bold tracking-widest uppercase text-sm mb-4">{syncState.message}</p>
+                        <div className="w-full bg-amber-100 rounded-full h-3 overflow-hidden">
+                            <div 
+                                className="bg-amber-500 h-3 rounded-full transition-all duration-300 ease-out" 
+                                style={{ width: `${syncState.progress}%` }}
+                            ></div>
+                        </div>
+                        <p className="text-xs text-amber-700/60 mt-2 font-medium">{syncState.progress}% concluído</p>
+                    </div>
                 </div>
             );
         }
@@ -943,6 +1261,16 @@ export default function App() {
                 .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #fcd34d; border-radius: 20px; }
                 .hide-scroll::-webkit-scrollbar { display: none; }
             `}</style>
+            
+            {/* PROGRESS BAR GLOBAL NO TOPO */}
+            {syncState.isSyncing && (
+                <div className="fixed top-0 left-0 w-full h-1.5 bg-gray-100 z-50">
+                    <div 
+                        className="h-full bg-amber-500 transition-all duration-300 ease-out"
+                        style={{ width: `${syncState.progress}%` }}
+                    ></div>
+                </div>
+            )}
             
             <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                 <div className="flex items-center gap-4 w-full xl:w-auto">

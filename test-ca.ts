@@ -1,4 +1,4 @@
-import { getContasReceber } from './api/services/contaAzul.js';
+import { getContasReceber } from './api/index.js';
 import dotenv from 'dotenv';
 dotenv.config();
 

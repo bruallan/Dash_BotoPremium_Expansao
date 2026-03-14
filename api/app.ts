@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
-import { getDashboardData, getDealHistory } from "./src/services/rdStation";
-import { getContasReceber, getContasPagar, getContasReceberPage, getContasPagarPage, getStoredTokens } from "./src/services/contaAzul";
+import path from "path";
+import fs from "fs";
+import { getDashboardData, getDealHistory } from "../src/services/rdStation";
+import { getContasReceber, getContasPagar, getContasReceberPage, getContasPagarPage, getStoredTokens } from "../src/services/contaAzul";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -654,7 +656,11 @@ app.post("/api/debug/redis", async (req, res) => {
 });
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  // Na Vercel, o processo de inicialização é diferente.
+  // Não devemos chamar app.listen() se estivermos em um ambiente serverless,
+  // mas a Vercel ignora o listen() se o app for exportado.
+  
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     try {
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
@@ -667,17 +673,24 @@ async function startServer() {
       console.error("Failed to load Vite middleware:", e);
     }
   } else {
-    if (!process.env.VERCEL) {
-      app.use(express.static("dist"));
-      app.get("*", (req, res) => {
-        res.sendFile("dist/index.html", { root: "." });
+    // Em produção (Vercel ou Docker), servimos os arquivos estáticos
+    const distPath = path.join(process.cwd(), "dist");
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res, next) => {
+        // Se for uma rota de API, não serve o index.html
+        if (req.path.startsWith('/api/')) return next();
+        res.sendFile(path.join(distPath, "index.html"));
       });
     }
   }
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`);
-  });
+  // Só inicia o servidor manualmente se não estiver na Vercel
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();

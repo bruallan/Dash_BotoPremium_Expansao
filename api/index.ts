@@ -737,7 +737,7 @@ export async function getContasReceber(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "RECEBIDO",
+      status: "ACQUITTED",
     },
     signal,
   );
@@ -756,7 +756,7 @@ export async function getContasPagar(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "PAGO",
+      status: "ACQUITTED",
     },
     signal,
   );
@@ -777,7 +777,7 @@ export async function getContasReceberPage(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "RECEBIDO",
+      status: "ACQUITTED",
       pagina: page,
       tamanho_pagina: 50
     },
@@ -800,7 +800,7 @@ export async function getContasPagarPage(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "PAGO",
+      status: "ACQUITTED",
       pagina: page,
       tamanho_pagina: 50
     },

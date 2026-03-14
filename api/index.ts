@@ -7,7 +7,6 @@ import path from "path";
 import fs from "fs";
 
 
-const RD_TOKEN = process.env.RD_CRM_TOKEN;
 const ID_FUNIL_EXPANSAO_P9 = "657b4ecdeea6360013316120";
 
 async function fetchAllDeals(url: string, signal?: AbortSignal) {
@@ -58,6 +57,7 @@ export async function getDashboardData(
   endDate: string,
   signal?: AbortSignal,
 ) {
+  const RD_TOKEN = process.env.RD_CRM_TOKEN;
   if (!RD_TOKEN) {
     console.warn("RD_CRM_TOKEN not configured. Returning empty data.");
     return {
@@ -202,6 +202,7 @@ export async function getDashboardData(
 }
 
 export async function getDealHistory(deal_id: string) {
+  const RD_TOKEN = process.env.RD_CRM_TOKEN;
   if (!RD_TOKEN) {
     console.warn("RD_CRM_TOKEN not configured. Returning empty timeline.");
     return [];
@@ -734,8 +735,8 @@ export async function getContasReceber(
   return fetchAllPages(
     "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      data_recebimento_de: de,
+      data_recebimento_ate: ate,
       status: "RECEBIDO",
     },
     signal,
@@ -753,9 +754,9 @@ export async function getContasPagar(
   return fetchAllPages(
     "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
-      status: "RECEBIDO",
+      data_pagamento_de: de,
+      data_pagamento_ate: ate,
+      status: "PAGO",
     },
     signal,
   );
@@ -774,8 +775,8 @@ export async function getContasReceberPage(
     "GET",
     "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      data_recebimento_de: de,
+      data_recebimento_ate: ate,
       status: "RECEBIDO",
       pagina: page,
       tamanho_pagina: 50
@@ -797,9 +798,9 @@ export async function getContasPagarPage(
     "GET",
     "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
-      status: "RECEBIDO",
+      data_pagamento_de: de,
+      data_pagamento_ate: ate,
+      status: "PAGO",
       pagina: page,
       tamanho_pagina: 50
     },

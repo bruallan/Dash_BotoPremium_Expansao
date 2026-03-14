@@ -54,8 +54,8 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
         <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900">
             <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="w-16 h-16 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-amber-600/30 text-3xl border border-amber-400/50 mb-4">
-                        B
+                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 mb-4 overflow-hidden">
+                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
                     </div>
                     <h1 className="text-2xl font-black tracking-tight text-gray-900">EXPANSÃO</h1>
                     <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-[0.2em]">Painel de Controle Estratégico</p>
@@ -1335,8 +1335,8 @@ export default function App() {
             
             <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                 <div className="flex items-center gap-4 w-full xl:w-auto">
-                    <div className="w-12 h-12 bg-gradient-to-br from-amber-300 via-yellow-500 to-amber-700 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-amber-600/30 text-2xl border border-amber-400/50">
-                        B
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 overflow-hidden">
+                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-1.5" referrerPolicy="no-referrer" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-gray-900">EXPANSÃO</h1>

@@ -737,7 +737,6 @@ export async function getContasReceber(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "ACQUITTED",
     },
     signal,
   );
@@ -756,7 +755,6 @@ export async function getContasPagar(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "ACQUITTED",
     },
     signal,
   );
@@ -777,7 +775,6 @@ export async function getContasReceberPage(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "ACQUITTED",
       pagina: page,
       tamanho_pagina: 50
     },
@@ -800,7 +797,6 @@ export async function getContasPagarPage(
     {
       data_vencimento_de: de,
       data_vencimento_ate: ate,
-      status: "ACQUITTED",
       pagina: page,
       tamanho_pagina: 50
     },
@@ -816,6 +812,27 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Aumentado para suportar o payload do calculate
 
 // NOVO ENDPOINT DE DEBUG: Verifica variÃ¡veis de ambiente
+app.get("/api/debug/raw-data", async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) {
+      return res.status(400).json({ error: "Missing start or end" });
+    }
+    
+    const [receberResult, pagarResult] = await Promise.allSettled([
+      getContasReceber(start as string, end as string),
+      getContasPagar(start as string, end as string)
+    ]);
+
+    res.json({
+      receitas: receberResult.status === 'fulfilled' ? receberResult.value : { error: receberResult.reason },
+      despesas: pagarResult.status === 'fulfilled' ? pagarResult.value : { error: pagarResult.reason }
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/debug/env", (req, res) => {
   const mask = (val: string | undefined) => {
     if (!val) return "âŒ AUSENTE";
@@ -928,65 +945,73 @@ app.post("/api/dashboard/calculate", async (req, res) => {
         ),
     );
 
-    const receitaBruta = taxaFranquiaRecebimentos.reduce(
-      (acc: number, curr: any) => acc + (curr.total || 0),
-      0,
-    );
+    const receitaBruta = taxaFranquiaRecebimentos.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0);
+    const receitaBrutaExecutada = taxaFranquiaRecebimentos.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0);
 
     const taxaFranquiaPorCliente: Record<string, number> = {};
+    const taxaFranquiaPorClienteExecutada: Record<string, number> = {};
     taxaFranquiaRecebimentos.forEach((c: any) => {
       const clienteId = c.cliente?.id || "unknown";
-      taxaFranquiaPorCliente[clienteId] =
-        (taxaFranquiaPorCliente[clienteId] || 0) + (c.total || 0);
+      taxaFranquiaPorCliente[clienteId] = (taxaFranquiaPorCliente[clienteId] || 0) + (c.total || 0);
+      taxaFranquiaPorClienteExecutada[clienteId] = (taxaFranquiaPorClienteExecutada[clienteId] || 0) + (c.pago || 0);
     });
+    
     const clientesTaxaFranquia = Object.values(taxaFranquiaPorCliente);
-    const taxaFranquiaMedia =
-      clientesTaxaFranquia.length > 0
-        ? clientesTaxaFranquia.reduce((a: number, b: number) => a + b, 0) /
-          clientesTaxaFranquia.length
-        : 0;
+    const taxaFranquiaMedia = clientesTaxaFranquia.length > 0 ? clientesTaxaFranquia.reduce((a: number, b: number) => a + b, 0) / clientesTaxaFranquia.length : 0;
+    
+    const clientesTaxaFranquiaExecutada = Object.values(taxaFranquiaPorClienteExecutada);
+    const taxaFranquiaMediaExecutada = clientesTaxaFranquiaExecutada.length > 0 ? clientesTaxaFranquiaExecutada.reduce((a: number, b: number) => a + b, 0) / clientesTaxaFranquiaExecutada.length : 0;
 
     // 2. Investimento em Marketing
     const mktPagar = contasPagar.filter((c: any) => {
       const desc = (c.descricao || "").toLowerCase();
       const obs = (c.observacao || "").toLowerCase();
-      return (
-        desc.includes("facebook") ||
-        desc.includes("google") ||
-        obs.includes("facebook") ||
-        obs.includes("google")
-      );
+      return desc.includes("facebook") || desc.includes("google") || obs.includes("facebook") || obs.includes("google");
     });
 
     let mktFacebook = 0;
     let mktGoogle = 0;
+    let mktFacebookExecutado = 0;
+    let mktGoogleExecutado = 0;
+    
     mktPagar.forEach((c: any) => {
       const desc = (c.descricao || "").toLowerCase();
       const obs = (c.observacao || "").toLowerCase();
-      if (desc.includes("facebook") || obs.includes("facebook"))
+      if (desc.includes("facebook") || obs.includes("facebook")) {
         mktFacebook += c.total || 0;
-      else if (desc.includes("google") || obs.includes("google"))
+        mktFacebookExecutado += c.pago || 0;
+      } else if (desc.includes("google") || obs.includes("google")) {
         mktGoogle += c.total || 0;
+        mktGoogleExecutado += c.pago || 0;
+      }
     });
     const investimentoMkt = mktFacebook + mktGoogle;
+    const investimentoMktExecutado = mktFacebookExecutado + mktGoogleExecutado;
 
     // 3. Custo AgÃªncia
     const agenciaPagar = contasPagar.filter((c: any) => {
       const fornecedor = (c.fornecedor?.nome || "").toLowerCase();
-      return (
-        fornecedor.includes("b e l consult") ||
-        fornecedor.includes("p9 digital")
-      );
+      return fornecedor.includes("b e l consult") || fornecedor.includes("p9 digital");
     });
 
     let agenciaP9 = 0;
     let agenciaBEL = 0;
+    let agenciaP9Executado = 0;
+    let agenciaBELExecutado = 0;
+    
     agenciaPagar.forEach((c: any) => {
       const fornecedor = (c.fornecedor?.nome || "").toLowerCase();
-      if (fornecedor.includes("p9 digital")) agenciaP9 += c.total || 0;
-      if (fornecedor.includes("b e l consult")) agenciaBEL += c.total || 0;
+      if (fornecedor.includes("p9 digital")) {
+        agenciaP9 += c.total || 0;
+        agenciaP9Executado += c.pago || 0;
+      }
+      if (fornecedor.includes("b e l consult")) {
+        agenciaBEL += c.total || 0;
+        agenciaBELExecutado += c.pago || 0;
+      }
     });
     const custoAgencia = agenciaP9 + agenciaBEL;
+    const custoAgenciaExecutado = agenciaP9Executado + agenciaBELExecutado;
 
     // 4. ComissÃµes de Venda
     const comissoesPagar = contasPagar.filter(
@@ -995,16 +1020,12 @@ app.post("/api/dashboard/calculate", async (req, res) => {
         Array.isArray(c.categorias) &&
         c.categorias.some(
           (cat: any) =>
-            (cat.nome || "")
-              .toLowerCase()
-              .includes("comissÃµes de vendedores") ||
+            (cat.nome || "").toLowerCase().includes("comissÃµes de vendedores") ||
             (cat.nome || "").toLowerCase().includes("comissoes de vendedores"),
         ),
     );
-    const comissoes = comissoesPagar.reduce(
-      (acc: number, curr: any) => acc + (curr.total || 0),
-      0,
-    );
+    const comissoes = comissoesPagar.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0);
+    const comissoesExecutadas = comissoesPagar.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0);
 
     // 5. Royalties
     const royaltiesRecebimentos = contasReceber.filter(
@@ -1019,6 +1040,7 @@ app.post("/api/dashboard/calculate", async (req, res) => {
 
     const royaltiesPorClienteMes: Record<string, Set<string>> = {};
     const royaltiesTotalPorCliente: Record<string, number> = {};
+    const royaltiesTotalPorClienteExecutado: Record<string, number> = {};
 
     royaltiesRecebimentos.forEach((c: any) => {
       const clienteId = c.cliente?.id || "unknown";
@@ -1034,16 +1056,21 @@ app.post("/api/dashboard/calculate", async (req, res) => {
 
       royaltiesTotalPorCliente[clienteId] =
         (royaltiesTotalPorCliente[clienteId] || 0) + (c.total || 0);
+      royaltiesTotalPorClienteExecutado[clienteId] =
+        (royaltiesTotalPorClienteExecutado[clienteId] || 0) + (c.pago || 0);
     });
 
     let somaMediasMensaisClientes = 0;
+    let somaMediasMensaisClientesExecutado = 0;
     let numClientesRoyalties = 0;
 
     Object.keys(royaltiesTotalPorCliente).forEach((clienteId) => {
       const total = royaltiesTotalPorCliente[clienteId];
+      const totalExecutado = royaltiesTotalPorClienteExecutado[clienteId];
       const meses = royaltiesPorClienteMes[clienteId].size;
       if (meses > 0) {
         somaMediasMensaisClientes += total / meses;
+        somaMediasMensaisClientesExecutado += totalExecutado / meses;
         numClientesRoyalties++;
       }
     });
@@ -1052,11 +1079,20 @@ app.post("/api/dashboard/calculate", async (req, res) => {
       numClientesRoyalties > 0
         ? somaMediasMensaisClientes / numClientesRoyalties
         : 0;
+    const royaltiesMensalMedioExecutado =
+      numClientesRoyalties > 0
+        ? somaMediasMensaisClientesExecutado / numClientesRoyalties
+        : 0;
 
     // 6. Faturamento MÃ©dio da Unidade
     const faturamentoMedio =
       contasReceber.length > 0
         ? contasReceber.reduce((acc: number, curr: any) => acc + (curr.total || 0), 0) /
+          contasReceber.length
+        : 0;
+    const faturamentoMedioExecutado =
+      contasReceber.length > 0
+        ? contasReceber.reduce((acc: number, curr: any) => acc + (curr.pago || 0), 0) /
           contasReceber.length
         : 0;
 
@@ -1068,16 +1104,27 @@ app.post("/api/dashboard/calculate", async (req, res) => {
         ...rdData,
         contaAzul: {
           receitaBruta,
+          receitaBrutaExecutada,
           taxaFranquiaMedia,
+          taxaFranquiaMediaExecutada,
           investimentoMkt,
+          investimentoMktExecutado,
           mktFacebook,
+          mktFacebookExecutado,
           mktGoogle,
+          mktGoogleExecutado,
           custoAgencia,
+          custoAgenciaExecutado,
           agenciaP9,
+          agenciaP9Executado,
           agenciaBEL,
+          agenciaBELExecutado,
           comissoes,
+          comissoesExecutadas,
           royaltiesMensalMedio,
+          royaltiesMensalMedioExecutado,
           faturamentoMedio,
+          faturamentoMedioExecutado,
         },
         debug: {
           logs: debugLogs,
@@ -1169,6 +1216,12 @@ app.get("/api/dashboard", async (req, res) => {
         log(
           `Contas a Receber (Conta Azul) carregadas: ${contasReceber.length} registros.`,
         );
+        console.log(`\n=== RELATÓRIO DE DADOS BRUTOS (RECEITAS) ===`);
+        console.log(`Período: ${queryStart} a ${queryEnd}`);
+        contasReceber.forEach((item: any) => {
+          console.log(`[RECEITA] Venc: ${item.data_vencimento} | Valor: ${item.valor} | Status: ${item.status} | Cat: ${item.categoria?.nome || item.category_id || 'N/A'} | Desc: ${item.descricao || 'N/A'}`);
+        });
+        console.log(`============================================\n`);
       } else {
         logError(
           `Falha ao carregar Contas a Receber do Conta Azul`,
@@ -1181,6 +1234,12 @@ app.get("/api/dashboard", async (req, res) => {
         log(
           `Contas a Pagar (Conta Azul) carregadas: ${contasPagar.length} registros.`,
         );
+        console.log(`\n=== RELATÓRIO DE DADOS BRUTOS (DESPESAS) ===`);
+        console.log(`Período: ${queryStart} a ${queryEnd}`);
+        contasPagar.forEach((item: any) => {
+          console.log(`[DESPESA] Venc: ${item.data_vencimento} | Valor: ${item.valor} | Status: ${item.status} | Cat: ${item.categoria?.nome || item.category_id || 'N/A'} | Desc: ${item.descricao || 'N/A'}`);
+        });
+        console.log(`============================================\n`);
       } else {
         logError(
           `Falha ao carregar Contas a Pagar do Conta Azul`,
@@ -1215,66 +1274,74 @@ app.get("/api/dashboard", async (req, res) => {
         ),
     );
 
-    const receitaBruta = taxaFranquiaRecebimentos.reduce(
-      (acc, curr) => acc + (curr.total || 0),
-      0,
-    );
+    const receitaBruta = taxaFranquiaRecebimentos.reduce((acc, curr) => acc + (curr.total || 0), 0);
+    const receitaBrutaExecutada = taxaFranquiaRecebimentos.reduce((acc, curr) => acc + (curr.pago || 0), 0);
 
     // Group by client for Taxa de Franquia MÃ©dia
     const taxaFranquiaPorCliente: Record<string, number> = {};
+    const taxaFranquiaPorClienteExecutada: Record<string, number> = {};
     taxaFranquiaRecebimentos.forEach((c) => {
       const clienteId = c.cliente?.id || "unknown";
-      taxaFranquiaPorCliente[clienteId] =
-        (taxaFranquiaPorCliente[clienteId] || 0) + (c.total || 0);
+      taxaFranquiaPorCliente[clienteId] = (taxaFranquiaPorCliente[clienteId] || 0) + (c.total || 0);
+      taxaFranquiaPorClienteExecutada[clienteId] = (taxaFranquiaPorClienteExecutada[clienteId] || 0) + (c.pago || 0);
     });
+    
     const clientesTaxaFranquia = Object.values(taxaFranquiaPorCliente);
-    const taxaFranquiaMedia =
-      clientesTaxaFranquia.length > 0
-        ? clientesTaxaFranquia.reduce((a, b) => a + b, 0) /
-          clientesTaxaFranquia.length
-        : 0;
+    const taxaFranquiaMedia = clientesTaxaFranquia.length > 0 ? clientesTaxaFranquia.reduce((a, b) => a + b, 0) / clientesTaxaFranquia.length : 0;
+    
+    const clientesTaxaFranquiaExecutada = Object.values(taxaFranquiaPorClienteExecutada);
+    const taxaFranquiaMediaExecutada = clientesTaxaFranquiaExecutada.length > 0 ? clientesTaxaFranquiaExecutada.reduce((a, b) => a + b, 0) / clientesTaxaFranquiaExecutada.length : 0;
 
     // 2. Investimento em Marketing
     const mktPagar = contasPagar.filter((c) => {
       const desc = (c.descricao || "").toLowerCase();
       const obs = (c.observacao || "").toLowerCase();
-      return (
-        desc.includes("facebook") ||
-        desc.includes("google") ||
-        obs.includes("facebook") ||
-        obs.includes("google")
-      );
+      return desc.includes("facebook") || desc.includes("google") || obs.includes("facebook") || obs.includes("google");
     });
 
     let mktFacebook = 0;
     let mktGoogle = 0;
+    let mktFacebookExecutado = 0;
+    let mktGoogleExecutado = 0;
+    
     mktPagar.forEach((c) => {
       const desc = (c.descricao || "").toLowerCase();
       const obs = (c.observacao || "").toLowerCase();
-      if (desc.includes("facebook") || obs.includes("facebook"))
+      if (desc.includes("facebook") || obs.includes("facebook")) {
         mktFacebook += c.total || 0;
-      else if (desc.includes("google") || obs.includes("google"))
+        mktFacebookExecutado += c.pago || 0;
+      } else if (desc.includes("google") || obs.includes("google")) {
         mktGoogle += c.total || 0;
+        mktGoogleExecutado += c.pago || 0;
+      }
     });
     const investimentoMkt = mktFacebook + mktGoogle;
+    const investimentoMktExecutado = mktFacebookExecutado + mktGoogleExecutado;
 
     // 3. Custo AgÃªncia
     const agenciaPagar = contasPagar.filter((c) => {
       const fornecedor = (c.fornecedor?.nome || "").toLowerCase();
-      return (
-        fornecedor.includes("b e l consult") ||
-        fornecedor.includes("p9 digital")
-      );
+      return fornecedor.includes("b e l consult") || fornecedor.includes("p9 digital");
     });
 
     let agenciaP9 = 0;
     let agenciaBEL = 0;
+    let agenciaP9Executado = 0;
+    let agenciaBELExecutado = 0;
+    
     agenciaPagar.forEach((c) => {
       const fornecedor = (c.fornecedor?.nome || "").toLowerCase();
-      if (fornecedor.includes("p9 digital")) agenciaP9 += c.total || 0;
-      if (fornecedor.includes("b e l consult")) agenciaBEL += c.total || 0;
+      if (fornecedor.includes("p9 digital")) {
+        agenciaP9 += c.total || 0;
+        agenciaP9Executado += c.pago || 0;
+      }
+      if (fornecedor.includes("b e l consult")) {
+        agenciaBEL += c.total || 0;
+        agenciaBELExecutado += c.pago || 0;
+      }
     });
     const custoAgencia = agenciaP9 + agenciaBEL;
+    const custoAgenciaExecutado = agenciaP9Executado + agenciaBELExecutado;
 
     // 4. ComissÃµes de Venda
     const comissoesPagar = contasPagar.filter(
@@ -1283,70 +1350,58 @@ app.get("/api/dashboard", async (req, res) => {
         Array.isArray(c.categorias) &&
         c.categorias.some(
           (cat: any) =>
-            (cat.nome || "")
-              .toLowerCase()
-              .includes("comissÃµes de vendedores") ||
+            (cat.nome || "").toLowerCase().includes("comissÃµes de vendedores") ||
             (cat.nome || "").toLowerCase().includes("comissoes de vendedores"),
         ),
     );
-    const comissoes = comissoesPagar.reduce(
-      (acc, curr) => acc + (curr.total || 0),
-      0,
-    );
+    const comissoes = comissoesPagar.reduce((acc, curr) => acc + (curr.total || 0), 0);
+    const comissoesExecutadas = comissoesPagar.reduce((acc, curr) => acc + (curr.pago || 0), 0);
 
     // 5. Royalties
     const royaltiesRecebimentos = contasReceber.filter(
       (c) =>
         c.categorias &&
         Array.isArray(c.categorias) &&
-        c.categorias.some((cat: any) =>
-          (cat.nome || "").toLowerCase().includes("royalties"),
-        ) &&
+        c.categorias.some((cat: any) => (cat.nome || "").toLowerCase().includes("royalties")) &&
         (c.total || 0) >= 3036,
     );
 
     const royaltiesPorClienteMes: Record<string, Set<string>> = {};
     const royaltiesTotalPorCliente: Record<string, number> = {};
+    const royaltiesTotalPorClienteExecutado: Record<string, number> = {};
 
     royaltiesRecebimentos.forEach((c) => {
       const clienteId = c.cliente?.id || "unknown";
-      const mes = c.data_competencia
-        ? String(c.data_competencia).substring(0, 7)
-        : c.data_vencimento
-          ? String(c.data_vencimento).substring(0, 7)
-          : "unknown";
+      const mes = c.data_competencia ? String(c.data_competencia).substring(0, 7) : c.data_vencimento ? String(c.data_vencimento).substring(0, 7) : "unknown";
 
-      if (!royaltiesPorClienteMes[clienteId])
-        royaltiesPorClienteMes[clienteId] = new Set();
+      if (!royaltiesPorClienteMes[clienteId]) royaltiesPorClienteMes[clienteId] = new Set();
       royaltiesPorClienteMes[clienteId].add(mes);
 
-      royaltiesTotalPorCliente[clienteId] =
-        (royaltiesTotalPorCliente[clienteId] || 0) + (c.total || 0);
+      royaltiesTotalPorCliente[clienteId] = (royaltiesTotalPorCliente[clienteId] || 0) + (c.total || 0);
+      royaltiesTotalPorClienteExecutado[clienteId] = (royaltiesTotalPorClienteExecutado[clienteId] || 0) + (c.pago || 0);
     });
 
     let somaMediasMensaisClientes = 0;
+    let somaMediasMensaisClientesExecutado = 0;
     let numClientesRoyalties = 0;
 
     Object.keys(royaltiesTotalPorCliente).forEach((clienteId) => {
       const total = royaltiesTotalPorCliente[clienteId];
+      const totalExecutado = royaltiesTotalPorClienteExecutado[clienteId];
       const meses = royaltiesPorClienteMes[clienteId].size;
       if (meses > 0) {
         somaMediasMensaisClientes += total / meses;
+        somaMediasMensaisClientesExecutado += totalExecutado / meses;
         numClientesRoyalties++;
       }
     });
 
-    const mediaRoyaltiesMensal =
-      numClientesRoyalties > 0
-        ? somaMediasMensaisClientes / numClientesRoyalties
-        : 0;
+    const mediaRoyaltiesMensal = numClientesRoyalties > 0 ? somaMediasMensaisClientes / numClientesRoyalties : 0;
+    const mediaRoyaltiesMensalExecutada = numClientesRoyalties > 0 ? somaMediasMensaisClientesExecutado / numClientesRoyalties : 0;
 
     // 6. Faturamento MÃ©dio da Unidade
-    const faturamentoMedio =
-      contasReceber.length > 0
-        ? contasReceber.reduce((acc, curr) => acc + (curr.total || 0), 0) /
-          contasReceber.length
-        : 0;
+    const faturamentoMedio = contasReceber.length > 0 ? contasReceber.reduce((acc, curr) => acc + (curr.total || 0), 0) / contasReceber.length : 0;
+    const faturamentoMedioExecutado = contasReceber.length > 0 ? contasReceber.reduce((acc, curr) => acc + (curr.pago || 0), 0) / contasReceber.length : 0;
 
     log(`Processamento concluÃ­do com sucesso.`);
 
@@ -1356,16 +1411,27 @@ app.get("/api/dashboard", async (req, res) => {
         ...(rdData || {}),
         contaAzul: {
           receitaBruta,
+          receitaBrutaExecutada,
           taxaFranquiaMedia,
+          taxaFranquiaMediaExecutada,
           investimentoMkt,
+          investimentoMktExecutado,
           mktFacebook,
+          mktFacebookExecutado,
           mktGoogle,
+          mktGoogleExecutado,
           custoAgencia,
+          custoAgenciaExecutado,
           agenciaP9,
+          agenciaP9Executado,
           agenciaBEL,
+          agenciaBELExecutado,
           comissoes,
+          comissoesExecutadas,
           mediaRoyaltiesMensal,
+          mediaRoyaltiesMensalExecutada,
           faturamentoMedio,
+          faturamentoMedioExecutado,
         },
         debug: {
           logs: debugLogs,

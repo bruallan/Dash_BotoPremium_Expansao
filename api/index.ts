@@ -2,8 +2,8 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
-import { getDashboardData, getDealHistory } from "./services/rdStation.ts";
-import { getContasReceber, getContasPagar, getContasReceberPage, getContasPagarPage, getStoredTokens } from "./services/contaAzul.ts";
+import { getDashboardData, getDealHistory } from "./services/rdStation";
+import { getContasReceber, getContasPagar, getContasReceberPage, getContasPagarPage, getStoredTokens } from "./services/contaAzul";
 
 const app = express();
 const PORT = process.env.PORT || 3000;

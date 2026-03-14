@@ -9,6 +9,28 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Aumentado para suportar o payload do calculate
 
+// NOVO ENDPOINT DE DEBUG: Verifica variáveis de ambiente
+app.get("/api/debug/env", (req, res) => {
+  const mask = (val: string | undefined) => {
+    if (!val) return "❌ AUSENTE";
+    if (val.length < 8) return "***";
+    return `${val.substring(0, 4)}...${val.substring(val.length - 4)}`;
+  };
+
+  res.json({
+    success: true,
+    env: {
+      RD_CRM_TOKEN: mask(process.env.RD_CRM_TOKEN),
+      CONTA_AZUL_CLIENT_ID: mask(process.env.CONTA_AZUL_CLIENT_ID),
+      CONTA_AZUL_CLIENT_SECRET: mask(process.env.CONTA_AZUL_CLIENT_SECRET),
+      CONTA_AZUL_REFRESH_TOKEN: mask(process.env.CONTA_AZUL_REFRESH_TOKEN),
+      REDIS_URL: mask(process.env.REDIS_URL),
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL: process.env.VERCEL || "false"
+    }
+  });
+});
+
 // NOVO ENDPOINT DE DEBUG: Verifica o token atual
 app.get("/api/debug/check-token", async (req, res) => {
   try {

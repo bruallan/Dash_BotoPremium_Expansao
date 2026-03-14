@@ -175,6 +175,23 @@ const ViewDebug = ({ apiData }: any) => {
     const [editingKey, setEditingKey] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<string>('');
     const [saveStatus, setSaveStatus] = useState('');
+    const [envData, setEnvData] = useState<any>(null);
+    const [loadingEnv, setLoadingEnv] = useState(false);
+
+    const fetchEnv = async () => {
+        setLoadingEnv(true);
+        try {
+            const res = await fetch('/api/debug/env');
+            const data = await res.json();
+            if (data.success) {
+                setEnvData(data.env);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingEnv(false);
+        }
+    };
 
     const fetchRedis = async () => {
         setLoading(true);
@@ -196,6 +213,10 @@ const ViewDebug = ({ apiData }: any) => {
             fetchRedis();
         }
     }, [showRedisEditor]);
+
+    useEffect(() => {
+        fetchEnv();
+    }, []);
 
     const handleEdit = (key: string, value: any) => {
         setEditingKey(key);
@@ -243,6 +264,46 @@ const ViewDebug = ({ apiData }: any) => {
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+            {/* Status das Variáveis de Ambiente */}
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Filter className="w-5 h-5 text-amber-600" /> Status das Variáveis de Ambiente (Vercel)
+                    </h3>
+                    <button 
+                        onClick={fetchEnv}
+                        disabled={loadingEnv}
+                        className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-2"
+                    >
+                        {loadingEnv ? <Loader2 className="w-3 h-3 animate-spin" /> : <Repeat className="w-3 h-3" />}
+                        Atualizar Status
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {envData ? Object.entries(envData).map(([key, value]: [string, any]) => (
+                        <div key={key} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col gap-1">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{key}</span>
+                            <span className={`text-sm font-mono font-bold ${value.includes('❌') ? 'text-red-500' : 'text-amber-700'}`}>
+                                {value}
+                            </span>
+                        </div>
+                    )) : (
+                        <div className="col-span-full text-center py-4 text-gray-400 italic">
+                            Carregando status das variáveis...
+                        </div>
+                    )}
+                </div>
+                
+                <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-100 flex gap-3 items-start">
+                    <div className="bg-amber-100 p-2 rounded-lg text-amber-600"><Bug className="w-4 h-4" /></div>
+                    <div className="text-xs text-amber-800 leading-relaxed">
+                        <p className="font-bold mb-1">Dica de Segurança:</p>
+                        <p>Os valores acima estão mascarados (exibindo apenas o início e o fim) para sua segurança. Se alguma variável aparecer como <span className="text-red-600 font-bold">❌ AUSENTE</span>, você precisa configurá-la no painel da Vercel (Settings &gt; Environment Variables) e fazer um novo Deploy.</p>
+                    </div>
+                </div>
+            </div>
+
             <div className="flex justify-end">
                 <button 
                     onClick={() => setShowRedisEditor(!showRedisEditor)}

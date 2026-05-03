@@ -3,8 +3,94 @@ import {
   Trophy, Filter, Wallet, Repeat, Scale, Users, BarChart, 
   Store, DollarSign, Tag, Megaphone, Award, UserPlus, Coins, Clock, TrendingUp,
   Calendar, Calculator, TrendingDown, Activity, Loader2, ArrowDown, Layout, 
-  X, History, FileText, CheckCircle, ArrowRightCircle, PackageX, LogIn, Terminal, Bug
+  X, History, FileText, CheckCircle, ArrowRightCircle, PackageX, LogIn, Terminal, Bug, User, LogOut, HelpCircle, ArrowLeft, RefreshCw
 } from 'lucide-react';
+
+const SectorSelection = ({ user, onSelectSector, onLogout }: any) => {
+    // Definir acessos
+    const getAllowedSectors = (u: string) => {
+        const username = u.toLowerCase();
+        if (username === 'admin' || username === 'bruno') {
+            return ['financeiro', 'operacoes', 'regionais', 'expansao'];
+        }
+        return [username];
+    };
+
+    const allowedSectors = getAllowedSectors(user);
+
+    const sectors = [
+        { id: 'financeiro', name: 'FINANCEIRO' },
+        { id: 'operacoes', name: 'OPERAÇÕES' },
+        { id: 'regionais', name: 'REGIONAIS' },
+        { id: 'expansao', name: 'EXPANSÃO' },
+        { id: 'rh', name: 'RH' },
+        { id: 'empty1', name: '' },
+        { id: 'empty2', name: '' },
+        { id: 'empty3', name: '' },
+        { id: 'empty4', name: '' },
+    ];
+
+    return (
+        <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900 relative">
+            
+            {/* Header Menu */}
+            <div className="absolute top-4 md:top-8 right-4 md:right-8 flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border border-gray-100">
+                    <User className="w-5 h-5 text-amber-500" />
+                    <span className="text-sm font-black text-gray-700 capitalize tracking-wide">{user}</span>
+                </div>
+                <button className="bg-white p-2.5 rounded-2xl text-gray-400 border border-gray-100 shadow-sm transition-colors opacity-50 cursor-not-allowed">
+                    <HelpCircle className="w-5 h-5" />
+                </button>
+                <button 
+                    onClick={onLogout}
+                    className="bg-white p-2.5 rounded-2xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shadow-sm border border-gray-100 group"
+                    title="Sair"
+                >
+                    <LogOut className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                </button>
+            </div>
+
+            <div className="w-full max-w-4xl text-center mb-12 flex flex-col items-center mt-16 md:mt-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 mb-6 overflow-hidden">
+                    <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-3" referrerPolicy="no-referrer" />
+                </div>
+                <h1 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900 mb-2">SELECIONE O SETOR</h1>
+                <p className="text-xs md:text-sm font-extrabold text-amber-600 uppercase tracking-[0.2em]">Painel de Controle Estratégico</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6 w-full max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-700">
+                {sectors.map((sector) => {
+                    const isAvailable = sector.name && allowedSectors.includes(sector.id);
+                    
+                    if (!sector.name) {
+                        return (
+                            <div key={sector.id} className="bg-gray-400/80 rounded-3xl h-28 md:h-40 w-full shadow-inner opacity-80"></div>
+                        );
+                    }
+
+                    if (!isAvailable) {
+                        return (
+                            <div key={sector.id} className="bg-gray-400/80 rounded-3xl h-28 md:h-40 w-full flex items-center justify-center shadow-inner opacity-80 cursor-not-allowed">
+                                <span className="font-black text-lg md:text-2xl text-white tracking-widest">{sector.name}</span>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <button
+                            key={sector.id}
+                            onClick={() => onSelectSector(sector.id)}
+                            className="bg-amber-400 hover:bg-amber-500 hover:scale-[1.02] active:scale-95 shadow-xl shadow-amber-400/30 rounded-3xl h-28 md:h-40 w-full flex items-center justify-center transition-all duration-300 group"
+                        >
+                            <span className="font-black text-lg md:text-2xl text-white tracking-widest group-hover:drop-shadow-md transition-all">{sector.name}</span>
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+    );
+};
 
 const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
     const [username, setUsername] = useState('');
@@ -17,8 +103,9 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if ((username === 'admin' || username === 'bruno') && password === '123456') {
-            onLogin(username);
+        const validUsers = ['admin', 'financeiro', 'operacoes', 'regionais', 'expansao', 'bruno'];
+        if (validUsers.includes(username.toLowerCase()) && password === '123456') {
+            onLogin(username.toLowerCase());
         } else {
             setError('Credenciais inválidas. Tente novamente.');
         }
@@ -1082,6 +1169,7 @@ const ViewPipeline = ({ apiData, formatBRL }: any) => {
 
 export default function App() {
     const [user, setUser] = useState<string | null>(null);
+    const [activeSector, setActiveSector] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('Resultado');
     const [apiData, setApiData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -1143,6 +1231,24 @@ export default function App() {
         
         setStartDate(formatDate(start));
         setEndDate(formatDate(end));
+    };
+
+    const handleSync = async () => {
+        if (!user) return;
+        setSyncState({ isSyncing: true, progress: 10, message: 'Iniciando sincronização com as APIs (Conta Azul e RD)...' });
+        try {
+            const res = await fetch("/api/sync-data", { method: "POST" });
+            if (!res.ok) throw new Error("Erro na sincronização");
+            setSyncState({ isSyncing: true, progress: 100, message: 'Sincronização concluída! Atualizando dados...' });
+            
+            const currentStart = startDate;
+            setStartDate("");
+            setTimeout(() => setStartDate(currentStart), 100);
+        } catch (e: any) {
+            console.error("Sync error:", e);
+            alert("Falha ao sincronizar: " + e.message);
+            setSyncState({ isSyncing: false, progress: 0, message: '' });
+        }
     };
 
     useEffect(() => {
@@ -1316,6 +1422,31 @@ export default function App() {
         return <LoginScreen onLogin={setUser} />;
     }
 
+    if (!activeSector) {
+        return <SectorSelection user={user} onSelectSector={setActiveSector} onLogout={() => setUser(null)} />;
+    }
+
+    if (activeSector !== 'expansao') {
+        return (
+            <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4">
+                <div className="bg-white p-12 rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center max-w-md text-center animate-in fade-in slide-in-from-bottom-4">
+                    <div className="w-20 h-20 bg-gray-100 rounded-2xl flex items-center justify-center mb-6">
+                        <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                    </div>
+                    <h2 className="text-2xl font-black text-gray-900 mb-2 uppercase">Em Desenvolvimento</h2>
+                    <p className="text-gray-500 font-medium mb-8">O painel de indicadores para o setor <strong className="text-amber-600 capitalize">{activeSector}</strong> está sendo construído e estará disponível em breve.</p>
+                    <button 
+                        onClick={() => setActiveSector(null)}
+                        className="flex items-center gap-2 bg-white text-gray-700 font-bold px-6 py-3 rounded-xl border-2 border-gray-200 hover:border-amber-400 hover:text-amber-600 transition-all shadow-sm"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        Voltar aos Setores
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8 w-full font-sans selection:bg-amber-100 selection:text-amber-900">
             <style>{`
@@ -1363,10 +1494,11 @@ export default function App() {
                             </button>
                         ))}
                         <button 
-                            onClick={() => setUser(null)}
-                            className="ml-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 transition-all duration-300"
+                            onClick={() => setActiveSector(null)}
+                            className="ml-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-all duration-300"
+                            title="Voltar aos Setores"
                         >
-                            Sair
+                            <ArrowLeft className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
@@ -1392,6 +1524,11 @@ export default function App() {
                     />
                 </div>
                 <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scroll">
+                    <button onClick={handleSync} disabled={syncState.isSyncing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all whitespace-nowrap hover:bg-emerald-100 disabled:opacity-50 flex flex-row items-center gap-2 pr-5">
+                       <RefreshCw className={`w-4 h-4 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
+                       {syncState.isSyncing ? 'Sincronizando...' : 'Sincronizar'}
+                    </button>
+                    <div className="w-px h-8 bg-gray-200 mx-1 hidden md:block"></div>
                     <button onClick={() => setDatePreset('allTime')} className={getBtnStyle('allTime')}>Período Total</button>
                     <button onClick={() => setDatePreset('currentMonth')} className={getBtnStyle('currentMonth')}>Mês Atual</button>
                     <button onClick={() => setDatePreset('prevMonth')} className={getBtnStyle('prevMonth')}>Mês Anterior</button>

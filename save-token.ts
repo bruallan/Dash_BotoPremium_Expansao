@@ -1,0 +1,25 @@
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
+import fs from "fs";
+
+const configPath = "./firebase-applet-config.json";
+const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+const refresh_token = 'eyJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2R0NNIiwiYWxnIjoiUlNBLU9BRVAifQ.iDHys4DuGrlxHKcivPzX8FnUrFIeeZnOtj9MTvK2GkCmC9-isyylz9dVuB0ub6nxI84TW7LUbcvRrzbxd51qSxgErI12foR23XzOi9oU6iY_Fcat-07K9miD2z8gjir-rVsM4-0ALCTuuAraTLnuzOVLzxNoQZuLrE8zdvKGqpc5ntoJ-AqWIeStYzUbDQt_wT1wlZbBSu-QykyBstNTZ_J6-3Rc_H9tdlGAcD76qm0gTfgL24Q_iG-a7kGV2JcsyoyWzASBoIuBeIaUQp1eP4vod6AFv12WRWqu-kN8fooZ39My8Ah6ads1PGpUmArr0ca7fxv6sS8DfCykLEikXQ.sIXl7dELHlHlXrZs.-aXwiEsJ6IYbbTtESymsUHOAhcJXKj8GJ_FgXuLXXZltVbbsJVKqYXDyjLNleg7CKU44AbWMhLR5DMD7VNLWsB19GD6fXp-BggOG0XMs1ruhVQIvbz82JjVtMIYGCE_af5FXyNmGq0ElslJE2VFtSmVLS9XxS5QU3_TyUo1HeAlnZYmlPla6wZP2BXW356XdgghcD0336giTUClWAd_SokIC_2tSxUnmcyLymsba4NunnLInVKhhf2arWbdqL6fcSUOdmA0ronqL071VeQdj96RoWxkntr4ks-RQvOtcLJmjqa8WBb1NIUXpqDVgnBODIPe2i-Ev_1iTbvGG0Z7pIDZuwZzHvxy-Wrkh2yTwXIJFXuP5jmVQApZKomOEDgZwvW-LeCpn6wAyI0GryyDmewMNRCJLfZRihDy0KrDcZkP5z6Hx23b9b7myvDDHo__aNRqQHI6tbKwqfVquMzVdJFhLTPntQZZTErf5926HF8eyNaWZ12591obbxZCF8Krg2nGdB5M3E70f9z2Q6AIVRDiwlsZW-bYXiEKAPUoPRMYz5x-DkL6yXqSiqlhUF3ndvJUtYcGU_OrHennjWSJ6DnzCHToHSJTo6S8JfJb-xZFcopERu_6Bz4-w5fCCSsRCsLdsyTLqkM1o8Gyq5WGYsE1U9Hfeg-szvmv5na4Ph1UQNnWagpT-aKDb_nxznAxn4xU7HqkCvp2U4-O1YplOOrHfVU05oM5g8PMl70_PtE-P9yKL6ZwonjJyc1O2I_JXDfHanw70ClR3ZyMLAi7O80aEypeAYdelpn3c5dkBRrjh4vhl3W6fveQ2nSP9QQEckSdw1jgaNzWfG6uXZGek3XKvFsXdozNQjOhX9Uh8HSonD97weNqihK5h9T-62113y0dosU98HDlhIET0wC0Wpoxg7s1DjpLsXd-irWEhPEMRtB1OGzi001fL5m-kf9RNK-JLIXmzvaYgs2HOb7PXzKVPU5Wu1LLPHWtLov7fFYscc4XgoQbg12-mBCE0tybjUMXAo29tDp0_9WJXnbQs-ya7dpppL1AFu0-YrLs2jbJMo0qS4kSE2xbH5RmFfQAzS0BJ_l8uj2YFjEPtEwzV5el4h1UMEPsDXa_H_bRcla9qQtH6_urIfGchR_MvkqjLdIGu6Z4CtI__Jxx_6joCnJ1V9kpSZimqJopF8wtzRrcb2Moc0doHq3Dq1Q8ick3rKSJnFhfTXbbcWzNcTQA59qNm7CBv4PN_ITT9na68AqGE85Jl_3sU7zo04N34IKOD-7f2qbEXkshqKpSDq6IkuTi3KpwZoCGgl35hMHG_kRe99wOGdQD7smg6UbGVbt0zkBEgRkn9d_--9RycmdmDasQZ4HZoBQiioX49g4J7MId1mp_F2EDsm9-9j833vxn8OzTZSl-9Imf0-KXiGjl2tSMaQ52i8SFFbRtild7AModhFMSr_g.ZS8CjScJhhlfpC6eDmT8Vw';
+
+async function testFirebase() {
+  await setDoc(doc(db, "tokens", "conta_azul"), {
+    access_token: "",
+    refresh_token: refresh_token,
+    updated_at: new Date().toISOString()
+  });
+  console.log("Written!");
+  process.exit(0);
+}
+
+testFirebase().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

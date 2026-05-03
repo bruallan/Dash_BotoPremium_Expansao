@@ -1,10 +1,26 @@
 import axios from "axios";
-import { createClient } from "redis";
 import nodemailer from "nodemailer";
 import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+
+let db: any = null;
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    console.log("Firebase initialized successfully");
+  } else {
+    console.warn("firebase-applet-config.json not found, Firebase features will fail.");
+  }
+} catch (e) {
+  console.error("Error initializing Firebase:", e);
+}
 
 
 const ID_FUNIL_EXPANSAO_P9 = "657b4ecdeea6360013316120";
@@ -283,83 +299,35 @@ export async function getDealHistory(deal_id: string) {
 const KV_KEY = "conta_azul_tokens_v2";
 
 let currentAccessToken: string | null = null;
+let currentRefreshToken: string | null = null;
 let tokenRefreshPromise: Promise<string> | null = null;
 
-let redisClient: any = null;
-
-async function getRedisClient() {
-  if (redisClient && redisClient.isOpen) return redisClient;
-  
-  if (!process.env.REDIS_URL) {
-    console.warn("REDIS_URL not set, skipping Redis operation");
-    return null;
-  }
-
-  try {
-    console.log(`Attempting to connect to Redis at ${process.env.REDIS_URL?.substring(0, 15)}...`);
-    redisClient = createClient({
-      url: process.env.REDIS_URL,
-      socket: {
-        connectTimeout: 15000,
-        reconnectStrategy: (retries) => {
-          if (retries > 3) return new Error("Redis reconnection failed after 3 attempts");
-          return 1000;
-        }
-      },
-    });
-    redisClient.on("error", (err: any) => console.error("Redis Client Error", err));
-    await redisClient.connect();
-    console.log("Redis connected successfully");
-    return redisClient;
-  } catch (e) {
-    console.error("CRITICAL: Failed to connect to Redis:", e);
-    redisClient = null;
-    return null;
-  }
-}
-
-// Helper to run a redis command
-async function withRedis<T>(
-  operation: (client: any) => Promise<T>,
-): Promise<T | null> {
-  const client = await getRedisClient();
-  if (!client) return null;
-
-  try {
-    // Increased timeout to 60 seconds as per user request to "wait"
-    const timeoutPromise = new Promise<null>((_, reject) => {
-      setTimeout(() => reject(new Error("Redis operation timed out after 60s")), 60000);
-    });
-
-    return await Promise.race([operation(client), timeoutPromise]) as T;
-  } catch (e) {
-    console.error("Redis operation failed:", e);
-    return null;
-  }
-}
-
 export async function getStoredTokens(): Promise<{ access_token?: string; refresh_token?: string } | null> {
+  if (!db) return null;
+
   try {
-    // Tenta ler a chave antiga e a nova para garantir compatibilidade
-    let dataStr = await withRedis(async (client) => await client.get("conta_azul_tokens_v2"));
-    
-    if (!dataStr) {
-      dataStr = await withRedis(async (client) => await client.get("conta_azul_tokens"));
-    }
-
-    if (dataStr) {
-      const data = JSON.parse(dataStr.toString());
-      
-      // Se os dados vierem aninhados dentro de uma propriedade "conta_azul_tokens" (como no seu print)
-      const tokenData = data.conta_azul_tokens ? data.conta_azul_tokens : data;
-
+    const docSnap = await getDoc(doc(db, "tokens", "conta_azul"));
+    if (docSnap.exists()) {
+      const tokenData = docSnap.data();
       if (tokenData && (tokenData.access_token || tokenData.refresh_token)) {
-        return tokenData;
+        currentAccessToken = tokenData.access_token || currentAccessToken;
+        currentRefreshToken = tokenData.refresh_token || currentRefreshToken;
+        return tokenData as any;
       }
     }
   } catch (e) {
-    console.error("Erro ao ler tokens do Redis:", e);
+    console.error("Erro ao ler tokens do Firebase:", e);
   }
+  
+  // Fallback to local memory if Firebase fails
+  if (currentAccessToken || currentRefreshToken) {
+    console.log("Firebase read failed, returning tokens from local memory cache.");
+    return {
+      access_token: currentAccessToken || undefined,
+      refresh_token: currentRefreshToken || undefined
+    };
+  }
+  
   return null;
 }
 
@@ -417,6 +385,7 @@ async function sendEmailNotification(accessToken: string, refreshToken: string) 
 
 async function saveTokens(accessToken: string, refreshToken: string) {
   currentAccessToken = accessToken;
+  currentRefreshToken = refreshToken;
   console.log("--------------------------------------------------");
   console.log("EMERGENCY TOKEN LOG - CONTA AZUL");
   console.log("NEW REFRESH TOKEN:", refreshToken);
@@ -433,22 +402,24 @@ async function saveTokens(accessToken: string, refreshToken: string) {
   while (!success && attempts < maxAttempts) {
     attempts++;
     try {
-      success = await withRedis(async (client) => {
-        await client.set(
-          KV_KEY,
-          JSON.stringify({
+      success = false;
+      if (db) {
+        try {
+          await setDoc(doc(db, "tokens", "conta_azul"), {
             access_token: accessToken,
             refresh_token: refreshToken,
             updated_at: new Date().toISOString(),
-          }),
-        );
-        return true;
-      }) || false;
+          });
+          success = true;
+        } catch (dbErr) {
+          console.error("Erro validando db Firebase:", dbErr);
+        }
+      }
 
       if (success) {
-        console.log(`Tokens saved successfully to Redis on attempt ${attempts}.`);
+        console.log(`Tokens saved successfully to Firebase on attempt ${attempts}.`);
       } else {
-        console.error(`Attempt ${attempts}: Failed to save tokens to Redis. Retrying...`);
+        console.error(`Attempt ${attempts}: Failed to save tokens to Firebase. Retrying...`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
       }
     } catch (e) {
@@ -478,12 +449,12 @@ async function refreshToken() {
         throw new Error("Conta Azul credentials (CLIENT_ID, CLIENT_SECRET) are missing.");
       }
 
-      // 1. Busca os tokens no Redis
+      // 1. Busca os tokens no Firebase
       const storedTokens = await getStoredTokens();
       
-      // 2. Define qual Refresh Token usar: O do Redis (se existir) ou o da Variável de Ambiente (como fallback inicial)
+      // 2. Define qual Refresh Token usar: O do Firebase (se existir) ou o da Variável de Ambiente (como fallback inicial)
       let tokenToUse = storedTokens?.refresh_token || ENV_REFRESH_TOKEN;
-      let source = storedTokens ? "Redis" : "Environment Variable";
+      let source = storedTokens ? "Firebase" : "Environment Variable";
 
       if (!tokenToUse) {
         throw new Error("No refresh token available in Redis or Environment Variables.");
@@ -525,11 +496,11 @@ async function refreshToken() {
           // 7. RESGATE A (Concorrência): Outra instância já renovou enquanto tentávamos?
           const latestTokens = await getStoredTokens();
           if (latestTokens && latestTokens.refresh_token !== tokenToUse) {
-            console.log("Confirmed: Another instance refreshed the token. Using the new one from Redis.");
+            console.log("Confirmed: Another instance refreshed the token. Using the new one from Firebase.");
             return latestTokens.access_token;
           }
 
-          // 8. RESGATE B (Variável de Ambiente): O token que falhou era o do Redis? A variável de ambiente é diferente?
+          // 8. RESGATE B (Variável de Ambiente): O token que falhou era o do Firebase? A variável de ambiente é diferente?
           if (ENV_REFRESH_TOKEN && ENV_REFRESH_TOKEN !== tokenToUse) {
             console.log(`Redis token failed, but Environment Variable is different. Attempting RESCUE with Env Var (...${ENV_REFRESH_TOKEN.slice(-4)})`);
             
@@ -558,7 +529,7 @@ async function refreshToken() {
               return resAccessToken;
             } catch (rescueError: any) {
               console.error("Rescue attempt with ENV_REFRESH_TOKEN also failed:", rescueError.response?.data || rescueError.message);
-              // 11. FALHA TOTAL: Nem o Redis nem a Variável de Ambiente funcionaram. (Cai no throw abaixo).
+              // 11. FALHA TOTAL: Nem o Firebase nem a Variável de Ambiente funcionaram. (Cai no throw abaixo).
             }
           }
         }
@@ -879,9 +850,40 @@ app.get("/api/debug/check-token", async (req, res) => {
   }
 });
 
-// ENDPOINTS GRANULARES PARA PAGINAÃ‡ÃƒO NO FRONTEND
+app.all("/api/sync-data", async (req, res) => {
+  try {
+    const minDate = "2025-01-01";
+    const maxDate = new Date().toISOString().split("T")[0]; // today
+
+    // Fetch RD Station
+    const rdData = await getDashboardData(minDate, maxDate);
+
+    // Fetch Conta Azul (Receber e Pagar)
+    const contasReceber = await getContasReceber(minDate, maxDate);
+    const contasPagar = await getContasPagar(minDate, maxDate);
+
+    // Save RD Data
+    if (db) {
+      await setDoc(doc(db, "cache", "rdData"), { data: rdData, updated_at: new Date().toISOString() });
+      
+      // Save CA chunked
+      await setDoc(doc(db, "cache", "caReceber"), { data: contasReceber, updated_at: new Date().toISOString() });
+      await setDoc(doc(db, "cache", "caPagar"), { data: contasPagar, updated_at: new Date().toISOString() });
+    }
+
+    res.json({ success: true, message: "Sincronização concluída com sucesso." });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 app.get("/api/data/rd", async (req, res) => {
   try {
+    if (db) {
+      const docSnap = await getDoc(doc(db, "cache", "rdData"));
+      if (docSnap.exists()) {
+        return res.json({ success: true, data: docSnap.data().data });
+      }
+    }
     const { startDate, endDate } = req.query;
     const minDate = "2025-01-01";
     const queryStart = startDate && startDate >= minDate ? startDate : minDate;
@@ -897,11 +899,22 @@ app.get("/api/data/rd", async (req, res) => {
 app.get("/api/data/ca-receber", async (req, res) => {
   try {
     const { startDate, endDate, page } = req.query;
+    const pageNum = parseInt(page as string) || 1;
+
+    if (db) {
+      const docSnap = await getDoc(doc(db, "cache", "caReceber"));
+      if (docSnap.exists()) {
+         const fullData = docSnap.data().data;
+         const start = (pageNum - 1) * 50;
+         const pageItems = fullData.slice(start, start + 50);
+         return res.json({ success: true, data: { items: pageItems, itens_totais: fullData.length } });
+      }
+    }
     const minDate = "2025-01-01";
     const queryStart = startDate && startDate >= minDate ? startDate : minDate;
     const queryEnd = endDate || new Date().toISOString().split("T")[0];
     
-    const data = await getContasReceberPage(queryStart as string, queryEnd as string, parseInt(page as string) || 1);
+    const data = await getContasReceberPage(queryStart as string, queryEnd as string, pageNum);
     res.json({ success: true, data });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
@@ -911,11 +924,22 @@ app.get("/api/data/ca-receber", async (req, res) => {
 app.get("/api/data/ca-pagar", async (req, res) => {
   try {
     const { startDate, endDate, page } = req.query;
+    const pageNum = parseInt(page as string) || 1;
+
+    if (db) {
+      const docSnap = await getDoc(doc(db, "cache", "caPagar"));
+      if (docSnap.exists()) {
+         const fullData = docSnap.data().data;
+         const start = (pageNum - 1) * 50;
+         const pageItems = fullData.slice(start, start + 50);
+         return res.json({ success: true, data: { items: pageItems, itens_totais: fullData.length } });
+      }
+    }
     const minDate = "2025-01-01";
     const queryStart = startDate && startDate >= minDate ? startDate : minDate;
     const queryEnd = endDate || new Date().toISOString().split("T")[0];
     
-    const data = await getContasPagarPage(queryStart as string, queryEnd as string, parseInt(page as string) || 1);
+    const data = await getContasPagarPage(queryStart as string, queryEnd as string, pageNum);
     res.json({ success: true, data });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });

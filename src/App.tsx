@@ -6,14 +6,22 @@ import {
   X, History, FileText, CheckCircle, ArrowRightCircle, PackageX, LogIn, Terminal, Bug, User, LogOut, HelpCircle, ArrowLeft, RefreshCw
 } from 'lucide-react';
 
-const SectorSelection = ({ user, onSelectSector, onLogout }: any) => {
+import RegionaisDashboard from './components/RegionaisDashboard';
+import DesenvolvimentoDashboard from './components/DesenvolvimentoDashboard';
+import FranqueadoDashboard from './components/FranqueadoDashboard';
+
+const SectorSelection = ({ user, profiles, onSelectSector, onLogout }: any) => {
     // Definir acessos
     const getAllowedSectors = (u: string) => {
         const username = u.toLowerCase();
-        if (username === 'admin' || username === 'bruno') {
-            return ['financeiro', 'operacoes', 'regionais', 'expansao'];
+        const profile = profiles?.find((p: any) => p.username.toLowerCase() === username);
+        let s = profile ? profile.sectors : [username];
+        
+        if (['bruno', 'admin', 'operacoes'].includes(username) && !s.includes('franqueado')) {
+            s = [...s, 'franqueado'];
         }
-        return [username];
+        
+        return s;
     };
 
     const allowedSectors = getAllowedSectors(user);
@@ -24,8 +32,8 @@ const SectorSelection = ({ user, onSelectSector, onLogout }: any) => {
         { id: 'regionais', name: 'REGIONAIS' },
         { id: 'expansao', name: 'EXPANSÃO' },
         { id: 'rh', name: 'RH' },
-        { id: 'empty1', name: '' },
-        { id: 'empty2', name: '' },
+        { id: 'desenvolvimento', name: 'DESENVOLVIMENTO' },
+        { id: 'franqueado', name: 'ÁREA DO FRANQUEADO' },
         { id: 'empty3', name: '' },
         { id: 'empty4', name: '' },
     ];
@@ -93,21 +101,71 @@ const SectorSelection = ({ user, onSelectSector, onLogout }: any) => {
 };
 
 const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
+    const [loginMode, setLoginMode] = useState<'admin' | 'franchisee'>('admin');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [email, setEmail] = useState('');
+    const [code, setCode] = useState('');
+    const [codeSent, setCodeSent] = useState(false);
     const [error, setError] = useState('');
     const [redisData, setRedisData] = useState<any>(null);
     const [loadingRedis, setLoadingRedis] = useState(false);
     const [tokenData, setTokenData] = useState<any>(null);
     const [loadingToken, setLoadingToken] = useState(false);
+    const [loadingAction, setLoadingAction] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmitAdmin = (e: React.FormEvent) => {
         e.preventDefault();
         const validUsers = ['admin', 'financeiro', 'operacoes', 'regionais', 'expansao', 'bruno'];
         if (validUsers.includes(username.toLowerCase()) && password === '123456') {
             onLogin(username.toLowerCase());
         } else {
             setError('Credenciais inválidas. Tente novamente.');
+        }
+    };
+
+    const handleSendCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoadingAction(true);
+        try {
+            const res = await fetch('/api/auth/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCodeSent(true);
+                setError('');
+            } else {
+                setError(data.error || 'Falha ao enviar código.');
+            }
+        } catch (err) {
+            setError('Erro de comunicação. Tente novamente.');
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    const handleVerifyCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoadingAction(true);
+        try {
+            const res = await fetch('/api/auth/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, code })
+            });
+            const data = await res.json();
+            if (data.success) {
+                onLogin(email.toLowerCase());
+            } else {
+                setError(data.error || 'Código inválido.');
+            }
+        } catch (err) {
+            setError('Erro de comunicação. Tente novamente.');
+        } finally {
+            setLoadingAction(false);
         }
     };
 
@@ -144,43 +202,107 @@ const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }) => {
                     <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 mb-4 overflow-hidden">
                         <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
                     </div>
-                    <h1 className="text-2xl font-black tracking-tight text-gray-900">EXPANSÃO</h1>
-                    <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-[0.2em]">Painel de Controle Estratégico</p>
+                    <h1 className="text-2xl font-black tracking-tight text-gray-900 text-center uppercase leading-tight">Painel de Controle Estratégico</h1>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Usuário</label>
-                        <input 
-                            type="text" 
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
-                            placeholder="admin"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Senha</label>
-                        <input 
-                            type="password" 
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
-                            placeholder="••••••"
-                            required
-                        />
-                    </div>
-                    
-                    {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
-
+                <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-xl">
                     <button 
-                        type="submit" 
-                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4"
+                        onClick={() => { setLoginMode('admin'); setError(''); setCodeSent(false); }}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${loginMode === 'admin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
-                        <LogIn className="w-5 h-5" /> Entrar no Dashboard
+                        Equipe Interna
                     </button>
-                </form>
+                    <button 
+                        onClick={() => { setLoginMode('franchisee'); setError(''); }}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${loginMode === 'franchisee' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                        Franqueado
+                    </button>
+                </div>
+
+                {loginMode === 'admin' ? (
+                    <form onSubmit={handleSubmitAdmin} className="space-y-5">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Usuário</label>
+                            <input 
+                                type="text" 
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                                placeholder="admin"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Senha</label>
+                            <input 
+                                type="password" 
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                                placeholder="••••••"
+                                required
+                            />
+                        </div>
+                        
+                        {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
+
+                        <button 
+                            type="submit" 
+                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4"
+                        >
+                            <LogIn className="w-5 h-5" /> Entrar no Dashboard
+                        </button>
+                    </form>
+                ) : (
+                    <form onSubmit={codeSent ? handleVerifyCode : handleSendCode} className="space-y-5">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email do Franqueado</label>
+                            <input 
+                                type="email" 
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                disabled={codeSent || loadingAction}
+                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all disabled:opacity-50"
+                                placeholder="franqueado@botopremium.com.br"
+                                required
+                            />
+                        </div>
+                        
+                        {codeSent && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Código de Verificação <span className="text-xs text-amber-500 font-normal lowercase">(enviado ao seu email)</span></label>
+                                <input 
+                                    type="text" 
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    disabled={loadingAction}
+                                    className="w-full bg-amber-50 border border-amber-200 text-amber-900 font-bold tracking-[0.2em] text-center rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                                    placeholder="000000"
+                                    maxLength={6}
+                                    required
+                                />
+                            </div>
+                        )}
+                        
+                        {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
+
+                        <button 
+                            type="submit" 
+                            disabled={loadingAction}
+                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-70"
+                        >
+                            {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />} 
+                            {codeSent ? 'Verificar e Entrar' : 'Receber Código'}
+                        </button>
+                        
+                        {codeSent && (
+                           <button type="button" onClick={() => setCodeSent(false)} className="w-full text-sm font-bold text-amber-600 hover:text-amber-700 mt-2 text-center" disabled={loadingAction}>
+                             Alterar email
+                           </button>
+                        )}
+                    </form>
+                )}
             </div>
 
             {/* Debug Redis Button - Só aparece se o usuário for "bruno" */}
@@ -1174,6 +1296,22 @@ export default function App() {
     const [apiData, setApiData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    const [profiles, setProfiles] = useState<any[]>(() => {
+        const saved = localStorage.getItem('accessProfiles');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) {}
+        }
+        return [
+            { username: 'bruno', sectors: ['financeiro', 'operacoes', 'regionais', 'expansao', 'desenvolvimento'] },
+            { username: 'brunoallan004', sectors: ['financeiro', 'operacoes', 'regionais', 'expansao', 'desenvolvimento'] },
+            { username: 'admin', sectors: ['financeiro', 'operacoes', 'regionais', 'expansao'] }
+        ];
+    });
+
+    useEffect(() => {
+        localStorage.setItem('accessProfiles', JSON.stringify(profiles));
+    }, [profiles]);
+
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [daysInPeriod, setDaysInPeriod] = useState(30);
@@ -1422,8 +1560,24 @@ export default function App() {
         return <LoginScreen onLogin={setUser} />;
     }
 
+    if (user.includes('@')) {
+        return <FranqueadoDashboard user={user} onBack={() => setUser(null)} />;
+    }
+
     if (!activeSector) {
-        return <SectorSelection user={user} onSelectSector={setActiveSector} onLogout={() => setUser(null)} />;
+        return <SectorSelection user={user} profiles={profiles} onSelectSector={setActiveSector} onLogout={() => setUser(null)} />;
+    }
+
+    if (activeSector === 'regionais') {
+        return <RegionaisDashboard user={user} onBack={() => setActiveSector(null)} onLogout={() => setUser(null)} />;
+    }
+
+    if (activeSector === 'desenvolvimento') {
+        return <DesenvolvimentoDashboard user={user} profiles={profiles} setProfiles={setProfiles} onBack={() => setActiveSector(null)} />;
+    }
+
+    if (activeSector === 'franqueado') {
+        return <FranqueadoDashboard user={user} onBack={() => setActiveSector(null)} />;
     }
 
     if (activeSector !== 'expansao') {
@@ -1466,6 +1620,7 @@ export default function App() {
                 </div>
             )}
             
+            <div className="max-w-[1600px] mx-auto w-full">
             <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                 <div className="flex items-center gap-4 w-full xl:w-auto">
                     <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 overflow-hidden">
@@ -1477,25 +1632,25 @@ export default function App() {
                     </div>
                 </div>
                 
-                <div className="w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0">
-                    <div className="flex items-center gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 min-w-max">
+                <div className="w-full xl:w-auto mt-4 xl:mt-0">
+                    <div className="flex flex-wrap items-center justify-start xl:justify-end gap-4 md:gap-6">
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap ${
+                                className={`flex items-center gap-2 text-sm font-bold transition-all duration-300 ${
                                     activeTab === tab.id 
-                                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 translate-y-[1px]' 
-                                        : 'text-gray-500 hover:bg-gray-50 hover:text-amber-700'
+                                        ? 'bg-[#f59e0b] text-white px-6 py-2.5 rounded-[20px] shadow-md shadow-amber-500/30' 
+                                        : 'text-gray-500 hover:text-amber-600'
                                 }`}
                             >
-                                <tab.icon className="w-4 h-4" />
-                                {tab.id}
+                                <tab.icon className="w-4 h-4 shrink-0" />
+                                <span>{tab.id}</span>
                             </button>
                         ))}
                         <button 
                             onClick={() => setActiveSector(null)}
-                            className="ml-2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-all duration-300"
+                            className="flex items-center justify-center gap-2 text-sm font-bold text-gray-400 hover:text-amber-600 transition-all duration-300 shrink-0 ml-2"
                             title="Voltar aos Setores"
                         >
                             <ArrowLeft className="w-5 h-5" />
@@ -1548,6 +1703,7 @@ export default function App() {
                 </div>
                 {renderContent()}
             </main>
+            </div>
         </div>
     );
 }

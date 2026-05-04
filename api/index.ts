@@ -1780,20 +1780,17 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             let responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
             
             try {
-                const model = ai.getGenerativeModel({
-                  model: 'gemini-1.5-flash',
-                  systemInstruction: "Você é um assistente especialista logístico e operacional em Botopremium falando pelo WhatsApp. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa. Seja claro e conciso.",
-                });
-
-                const result = await model.generateContent({
+                const resGemini = await ai.models.generateContent({
+                  model: 'gemini-2.5-flash',
                   contents: formattedHistory,
-                  generationConfig: {
+                  config: {
+                     systemInstruction: "Você é um assistente especialista logístico e operacional em Botopremium falando pelo WhatsApp. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa. Seja claro e conciso.",
                      temperature: 0.2,
                      maxOutputTokens: 500,
                   }
                 });
                 
-                responseText = result.response.text();
+                responseText = resGemini.text;
                 console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
             } catch (aiError: any) {
                 console.error("Erro na geração de IA via WhatsApp:", aiError.message);

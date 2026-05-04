@@ -1724,9 +1724,9 @@ app.get('/api/chat/history', async (req, res) => {
 });
 
 async function startServer() {
-  // Cron Job (Atualiza dia 1 de cada mês as 03:00)
-  cron.schedule('0 3 1 * *', async () => {
-    console.log('[CRON] Iniciando sincronização mensal do Conta Azul/RD...');
+  // Cron Job (Atualiza diariamente as 03:00)
+  cron.schedule('0 3 * * *', async () => {
+    console.log('[CRON] Iniciando sincronização diária do Conta Azul/RD...');
     try {
        const maxDate = new Date().toISOString().split("T")[0];
        const minDate = "2025-01-01";
@@ -1742,7 +1742,7 @@ async function startServer() {
          await setDoc(doc(db, "cache", "caReceber"), { data: caRec, updated_at: new Date().toISOString() });
          await setDoc(doc(db, "cache", "caPagar"), { data: caPag, updated_at: new Date().toISOString() });
        }
-       console.log('[CRON] Sincronização mensal concluída!');
+       console.log('[CRON] Sincronização diária concluída!');
     } catch(err) {
        console.error('[CRON] Erro:', err);
     }

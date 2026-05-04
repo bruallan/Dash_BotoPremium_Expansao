@@ -1419,7 +1419,7 @@ export default function App() {
         useEffect(() => {
         if (!startDate || !endDate || !user) return;
         handleSync(false);
-    }, [startDate, endDate]); 
+    }, [startDate, endDate, user]); 
 
     let tabs = [
         { id: 'Resultado', icon: Trophy },

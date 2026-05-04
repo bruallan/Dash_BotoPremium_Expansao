@@ -2007,7 +2007,7 @@ app.post('/api/agent/upload-manual', async (req, res) => {
     
     // Create unique filename
     const safeName = name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const storageRef = ref(storage, \`manuals/\${Date.now()}_\${safeName}\`);
+    const storageRef = ref(storage, `manuals/${Date.now()}_${safeName}`);
     const snapshot = await uploadString(storageRef, base64Data, 'data_url');
     const downloadURL = await getDownloadURL(snapshot.ref);
     

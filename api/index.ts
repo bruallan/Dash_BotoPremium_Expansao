@@ -1,3 +1,5 @@
+
+import cron from 'node-cron';
 import axios from "axios";
 import nodemailer from "nodemailer";
 import express from "express";
@@ -956,7 +958,28 @@ app.post("/api/dashboard/calculate", async (req, res) => {
   };
 
   try {
-    const { rdData, contasReceber, contasPagar, startDate, endDate } = req.body;
+    let { startDate, endDate } = req.body;
+    let rdData: any[] = [];
+    let contasReceber: any[] = [];
+    let contasPagar: any[] = [];
+
+    if (db) {
+      log("Buscando dados em cache no Firebase...");
+      try {
+        const [rdSnap, caRecSnap, caPagSnap] = await Promise.all([
+          getDoc(doc(db, "cache", "rdData")),
+          getDoc(doc(db, "cache", "caReceber")),
+          getDoc(doc(db, "cache", "caPagar"))
+        ]);
+        
+        rdData = rdSnap.exists() ? rdSnap.data().data : [];
+        contasReceber = caRecSnap.exists() ? caRecSnap.data().data : [];
+        contasPagar = caPagSnap.exists() ? caPagSnap.data().data : [];
+      } catch (err: any) {
+        log("Erro ao buscar do cache: " + err.message);
+      }
+    }
+
     log(`Processando dados do Conta Azul (${contasReceber.length} receber, ${contasPagar.length} pagar)...`);
 
     // Filtra contasReceber para o período atual (para as outras métricas que não são Taxa de Franquia)
@@ -1701,6 +1724,30 @@ app.get('/api/chat/history', async (req, res) => {
 });
 
 async function startServer() {
+  // Cron Job (Atualiza dia 1 de cada mês as 03:00)
+  cron.schedule('0 3 1 * *', async () => {
+    console.log('[CRON] Iniciando sincronização mensal do Conta Azul/RD...');
+    try {
+       const maxDate = new Date().toISOString().split("T")[0];
+       const minDate = "2025-01-01";
+       console.log('[CRON] Buscando RD...');
+       const rd = await getDashboardData(minDate, maxDate);
+       console.log('[CRON] Buscando Receber...');
+       const caRec = await getContasReceber(minDate, maxDate);
+       console.log('[CRON] Buscando Pagar...');
+       const caPag = await getContasPagar(minDate, maxDate);
+       
+       if (db) {
+         await setDoc(doc(db, "cache", "rdData"), { data: rd, updated_at: new Date().toISOString() });
+         await setDoc(doc(db, "cache", "caReceber"), { data: caRec, updated_at: new Date().toISOString() });
+         await setDoc(doc(db, "cache", "caPagar"), { data: caPag, updated_at: new Date().toISOString() });
+       }
+       console.log('[CRON] Sincronização mensal concluída!');
+    } catch(err) {
+       console.error('[CRON] Erro:', err);
+    }
+  });
+
   // Na Vercel, o processo de inicializaÃ§Ãƒo Ã© diferente.
   // NÃƒo devemos chamar app.listen() se estivermos em um ambiente serverless,
   // mas a Vercel ignora o listen() se o app for exportado.

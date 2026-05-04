@@ -1371,136 +1371,55 @@ export default function App() {
         setEndDate(formatDate(end));
     };
 
-    const handleSync = async () => {
-        if (!user) return;
-        setSyncState({ isSyncing: true, progress: 10, message: 'Iniciando sincronização com as APIs (Conta Azul e RD)...' });
+    
+    const handleSync = async (forceRefresh = false) => {
+        if (!startDate || !endDate) return;
+
+        setLoading(true);
+        setSyncState({ isSyncing: true, progress: 10, message: forceRefresh ? 'Iniciando sincronização (Conta Azul/RD)...' : 'Calculando métricas...' });
+        
         try {
-            const res = await fetch("/api/sync-data", { method: "POST" });
-            if (!res.ok) throw new Error("Erro na sincronização");
-            setSyncState({ isSyncing: true, progress: 100, message: 'Sincronização concluída! Atualizando dados...' });
+            if (forceRefresh) {
+                const syncRes = await fetch('/api/sync-data');
+                if (!syncRes.ok) throw new Error('Falha ao forçar sincronização com as APIs.');
+                setSyncState({ isSyncing: true, progress: 50, message: 'Processando dados...' });
+            }
+
+            const calcRes = await fetch('/api/dashboard/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ startDate, endDate })
+            });
             
-            const currentStart = startDate;
-            setStartDate("");
-            setTimeout(() => setStartDate(currentStart), 100);
-        } catch (e: any) {
-            console.error("Sync error:", e);
-            alert("Falha ao sincronizar: " + e.message);
-            setSyncState({ isSyncing: false, progress: 0, message: '' });
+            if (!calcRes.ok) throw new Error('Falha ao calcular métricas');
+            const calcResult = await calcRes.json();
+            
+            if (calcResult.success) {
+                setApiData(calcResult.dados);
+            } else {
+                setApiData(calcResult);
+            }
+            
+            setSyncState({ isSyncing: false, progress: 100, message: 'Concluído!' });
+
+        } catch (error: any) {
+            console.error("Erro ao buscar dados", error);
+            setApiData({ debug: { errors: [`Erro de rede ou timeout: ${error.message}`], logs: [] } });
+            setSyncState({ isSyncing: false, progress: 0, message: `Erro: ${error.message}` });
+        } finally {
+            setLoading(false);
         }
     };
+
 
     useEffect(() => {
         setDatePreset('allTime');
     }, []);
 
-    useEffect(() => {
-        async function fetchData() {
-            if (!startDate || !endDate || !user) return;
-            
-            setLoading(true);
-            setSyncState({ isSyncing: true, progress: 5, message: 'Iniciando sincronização com RD Station...' });
-            
-            try {
-                // 1. Buscar RD Station
-                const rdRes = await fetch(`/api/data/rd?startDate=${startDate}&endDate=${endDate}`);
-                if (!rdRes.ok) throw new Error('Falha ao buscar dados do RD Station');
-                const rdResult = await rdRes.json();
-                const rdData = rdResult.data;
-                
-                setSyncState({ isSyncing: true, progress: 15, message: 'Buscando Contas a Receber (Conta Azul)...' });
-                
-                // 2. Buscar Contas a Receber (Paginado - Otimizado)
-                // Usamos uma data inicial fixa para pegar o histórico completo e agrupar parcelamentos corretamente
-                const historyStartDate = "2025-01-01";
-                let contasReceber: any[] = [];
-                const firstRecRes = await fetch(`/api/data/ca-receber?startDate=${historyStartDate}&endDate=${endDate}&page=1`);
-                if (!firstRecRes.ok) throw new Error('Falha ao buscar Contas a Receber (Página 1)');
-                const firstRecResult = await firstRecRes.json();
-                const itemsRec1 = firstRecResult.data?.items || firstRecResult.data?.itens || [];
-                const totalItemsRec = firstRecResult.data?.itens_totais || 0;
-                contasReceber = contasReceber.concat(itemsRec1);
-                
-                if (totalItemsRec > 50) {
-                    const totalPagesRec = Math.ceil(totalItemsRec / 50);
-                    for (let i = 2; i <= totalPagesRec; i += 4) {
-                        const promises = [];
-                        for (let j = 0; j < 4 && (i + j) <= totalPagesRec; j++) {
-                            promises.push(fetch(`/api/data/ca-receber?startDate=${historyStartDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
-                        }
-                        const results = await Promise.all(promises);
-                        results.forEach(res => {
-                            const items = res.data?.items || res.data?.itens || [];
-                            contasReceber = contasReceber.concat(items);
-                        });
-                        const progress = 15 + Math.min(35, Math.round((contasReceber.length / totalItemsRec) * 35));
-                        setSyncState({ isSyncing: true, progress, message: `Baixando Contas a Receber: ${contasReceber.length} de ${totalItemsRec}...` });
-                        await new Promise(r => setTimeout(r, 300)); // Delay entre lotes
-                    }
-                } else {
-                    setSyncState({ isSyncing: true, progress: 50, message: `Baixando Contas a Receber: ${contasReceber.length} de ${totalItemsRec}...` });
-                }
-
-                setSyncState({ isSyncing: true, progress: 50, message: 'Buscando Contas a Pagar (Conta Azul)...' });
-
-                // 3. Buscar Contas a Pagar (Paginado - Otimizado)
-                let contasPagar: any[] = [];
-                const firstPagRes = await fetch(`/api/data/ca-pagar?startDate=${startDate}&endDate=${endDate}&page=1`);
-                if (!firstPagRes.ok) throw new Error('Falha ao buscar Contas a Pagar (Página 1)');
-                const firstPagResult = await firstPagRes.json();
-                const itemsPag1 = firstPagResult.data?.items || firstPagResult.data?.itens || [];
-                const totalItemsPag = firstPagResult.data?.itens_totais || 0;
-                contasPagar = contasPagar.concat(itemsPag1);
-
-                if (totalItemsPag > 50) {
-                    const totalPagesPag = Math.ceil(totalItemsPag / 50);
-                    for (let i = 2; i <= totalPagesPag; i += 4) {
-                        const promises = [];
-                        for (let j = 0; j < 4 && (i + j) <= totalPagesPag; j++) {
-                            promises.push(fetch(`/api/data/ca-pagar?startDate=${startDate}&endDate=${endDate}&page=${i + j}`).then(r => r.json()));
-                        }
-                        const results = await Promise.all(promises);
-                        results.forEach(res => {
-                            const items = res.data?.items || res.data?.itens || [];
-                            contasPagar = contasPagar.concat(items);
-                        });
-                        const progress = 50 + Math.min(40, Math.round((contasPagar.length / totalItemsPag) * 40));
-                        setSyncState({ isSyncing: true, progress, message: `Baixando Contas a Pagar: ${contasPagar.length} de ${totalItemsPag}...` });
-                        await new Promise(r => setTimeout(r, 300)); // Delay entre lotes
-                    }
-                } else {
-                    setSyncState({ isSyncing: true, progress: 90, message: `Baixando Contas a Pagar: ${contasPagar.length} de ${totalItemsPag}...` });
-                }
-                setSyncState({ isSyncing: true, progress: 95, message: 'Calculando métricas financeiras...' });
-
-                // 4. Enviar para o backend calcular
-                const calcRes = await fetch('/api/dashboard/calculate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rdData, contasReceber, contasPagar, startDate, endDate })
-                });
-                
-                if (!calcRes.ok) throw new Error('Falha ao calcular métricas');
-                const calcResult = await calcRes.json();
-                
-                if (calcResult.success) {
-                    setApiData(calcResult.dados);
-                } else {
-                    setApiData(calcResult);
-                }
-                
-                setSyncState({ isSyncing: false, progress: 100, message: 'Concluído!' });
-
-            } catch (error: any) {
-                console.error("Erro ao buscar dados", error);
-                setApiData({ debug: { errors: [`Erro de rede ou timeout: ${error.message}`], logs: [] } });
-                setSyncState({ isSyncing: false, progress: 0, message: `Erro: ${error.message}` });
-            } finally {
-                setLoading(false);
-            }
-        }
-        
-        fetchData();
-    }, [startDate, endDate, user]); 
+        useEffect(() => {
+        if (!startDate || !endDate || !user) return;
+        handleSync(false);
+    }, [startDate, endDate]); 
 
     let tabs = [
         { id: 'Resultado', icon: Trophy },
@@ -1679,7 +1598,7 @@ export default function App() {
                     />
                 </div>
                 <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scroll">
-                    <button onClick={handleSync} disabled={syncState.isSyncing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all whitespace-nowrap hover:bg-emerald-100 disabled:opacity-50 flex flex-row items-center gap-2 pr-5">
+                    <button onClick={() => handleSync(true)} disabled={syncState.isSyncing} className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all whitespace-nowrap hover:bg-emerald-100 disabled:opacity-50 flex flex-row items-center gap-2 pr-5">
                        <RefreshCw className={`w-4 h-4 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
                        {syncState.isSyncing ? 'Sincronizando...' : 'Sincronizar'}
                     </button>

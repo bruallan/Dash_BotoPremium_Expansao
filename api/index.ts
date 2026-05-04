@@ -789,6 +789,20 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Aumentado para suportar o payload do calculate
 
+app.get("/api/debug/firebase-config", (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const fbConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      res.json({ success: true, config: fbConfig });
+    } else {
+      res.json({ success: false, error: "Config not found" });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // NOVO ENDPOINT DE DEBUG: Verifica variÃ¡veis de ambiente
 app.get("/api/debug/raw-data", async (req, res) => {
   try {

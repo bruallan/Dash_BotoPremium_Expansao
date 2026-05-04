@@ -54,33 +54,62 @@ const DesenvolvimentoDashboard = ({ user, profiles, setProfiles, onBack }: any) 
 
         try {
             setUploadingManual(true);
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                const base64Data = event.target?.result;
-                const res = await fetch('/api/agent/upload-manual', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: file.name, base64Data })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    const newManuals = [...(agentConfig.manuals || []), { name: data.name, url: data.url, path: data.path }];
+            
+            // Em vez de enviar por base64 (o que excede o limite de 4.5MB da Vercel)
+            // Vamos fazer o upload diretamente para o Firebase Storage do lado do cliente
+            
+            // 1. Buscamos a configuração do Firebase da nossa API
+            const fbRes = await fetch('/api/debug/firebase-config');
+            const fbConfigData = await fbRes.json();
+            
+            if (!fbConfigData.success) {
+                throw new Error("Erro ao carregar configurações do Firebase.");
+            }
+            
+            // 2. Importamos os módulos do Firebase Storage dinamicamente
+            const { initializeApp } = await import('firebase/app');
+            const { getStorage, ref, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
+            
+            const app = initializeApp(fbConfigData.config);
+            const storage = getStorage(app, `gs://${fbConfigData.config.storageBucket}`);
+            
+            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const storageRef = ref(storage, `manuals/${Date.now()}_${safeName}`);
+            
+            // 3. Fazemos o upload direto do arquivo!
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    // Opcional: mostrar progresso
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    console.log('Upload is ' + progress + '% done');
+                }, 
+                (error) => {
+                    console.error("Upload failed:", error);
+                    alert(`Erro de permissão no Storage: Certifique-se de que as Regras do Firebase Storage permitem escritas. (Erro: ${error.message})`);
+                    setUploadingManual(false);
+                }, 
+                async () => {
+                    // 4. Sucesso! Pegamos a URL.
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    
+                    const newManuals = [...(agentConfig.manuals || []), { name: file.name, url: downloadURL, path: uploadTask.snapshot.ref.fullPath }];
                     setAgentConfig({ ...agentConfig, manuals: newManuals });
                     
-                    // auto save config
+                    // Salvamos a nova configuração
                     await fetch('/api/agent/config', {
                        method: 'POST',
                        headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify({ ...agentConfig, manuals: newManuals })
                     });
-                } else {
-                    alert(data.error);
+                    
+                    setUploadingManual(false);
                 }
-                setUploadingManual(false);
-            };
-            reader.readAsDataURL(file);
-        } catch (err) {
+            );
+        } catch (err: any) {
             console.error(err);
+            alert("Erro ao enviar manual: " + err.message);
             setUploadingManual(false);
         }
     };
@@ -89,11 +118,23 @@ const DesenvolvimentoDashboard = ({ user, profiles, setProfiles, onBack }: any) 
         if (!window.confirm("Deseja realmente remover este manual?")) return;
         try {
             setAgentLoading(true);
-            await fetch('/api/agent/delete-manual', {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ path: manualPath })
-            });
+            
+            // Exclui diretamente via frontend para contornar problemas de autenticação do backend.
+            try {
+                const fbRes = await fetch('/api/debug/firebase-config');
+                const fbConfigData = await fbRes.json();
+                if (fbConfigData.success) {
+                    const { initializeApp } = await import('firebase/app');
+                    const { getStorage, ref, deleteObject } = await import('firebase/storage');
+                    const app = initializeApp(fbConfigData.config);
+                    const storage = getStorage(app, `gs://${fbConfigData.config.storageBucket}`);
+                    const storageRef = ref(storage, manualPath);
+                    await deleteObject(storageRef);
+                }
+            } catch (e: any) {
+                console.warn("Aviso ao deletar do storage (removendo da lista mesmo assim):", e.message);
+                alert(`O manual será removido da lista, mas não pôde ser excluído do Storage devido a permissões.\n\nVerifique as regras do Firebase Storage. (Erro: ${e.message})`);
+            }
 
             const newManuals = agentConfig.manuals.filter((m: any) => m.path !== manualPath);
             setAgentConfig({ ...agentConfig, manuals: newManuals });

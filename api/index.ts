@@ -1745,16 +1745,16 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
       const messageObj = change?.value?.messages?.[0];
 
       if (messageObj) {
-        // Obter variáveis de ambiente ou usar as fornecidas pelo usuário
-        let phone_number_id = process.env.WHATSAPP_PHONE_ID || '1166257203227529';
-        let whatsapp_token = process.env.WHATSAPP_TOKEN || 'EAAi9ZAZAvaAqQBRbY1KpELQn5KxQ4J9qUHYhmWpDQpY5ZCNknGaHnZCeVQoNYCHYJV8zbGD0ZC8IoK4MRmFXV6f9mqpmMuvMkPlIFmCMjnJm1yJ8ZCJ8UoCQdERZA9JwBWeuik5hTtZA24kUFxORTsKHvxItYhCMJIYPZALVunQZBOTxiqBpN5SUTZA6tmsqEHadO23dgZDZD';
+        // Credenciais fornecidas pelo usuário
+        const phone_number_id = process.env.WHATSAPP_PHONE_ID || '1166257203227529';
+        const whatsapp_token = process.env.WHATSAPP_TOKEN || 'EAAi9ZAZAvaAqQBRbY1KpELQn5KxQ4J9qUHYhmWpDQpY5ZCNknGaHnZCeVQoNYCHYJV8zbGD0ZC8IoK4MRmFXV6f9mqpmMuvMkPlIFmCMjnJm1yJ8ZCJ8UoCQdERZA9JwBWeuik5hTtZA24kUFxORTsKHvxItYhCMJIYPZALVunQZBOTxiqBpN5SUTZA6tmsqEHadO23dgZDZD';
         
-        let from = messageObj.from;
-        let msg_body = messageObj.text?.body;
+        const from = messageObj.from;
+        const msg_body = messageObj.text?.body;
+        
+        console.log(`[WhatsApp] Mensagem recebida de ${from}: "${msg_body}"`);
         
         if (msg_body) {
-            console.log(`WhatsApp message received from ${from}: ${msg_body}`);
-            
             // Gerar resposta com Gemini
             const ai = getAi();
             let history: any[] = [];
@@ -1780,18 +1780,24 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             let responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
             
             try {
-                const resGemini = await ai.models.generateContent({
-                  model: 'gemini-2.5-flash',
+                const model = ai.getGenerativeModel({
+                  model: 'gemini-1.5-flash',
+                  systemInstruction: "Você é um assistente especialista logístico e operacional em Botopremium falando pelo WhatsApp. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa. Seja claro e conciso.",
+                });
+
+                const result = await model.generateContent({
                   contents: formattedHistory,
-                  config: {
-                     systemInstruction: "Você é um assistente especialista logístico e operacional em Botopremium falando pelo WhatsApp. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa. Seja claro e conciso.",
-                     temperature: 0.2
+                  generationConfig: {
+                     temperature: 0.2,
+                     maxOutputTokens: 500,
                   }
                 });
-                responseText = resGemini.text;
-            } catch (aiError) {
-                console.error("Erro na geração de IA via WhatsApp:", aiError);
-                responseText = "Estou com problemas para pensar no momento (Verifique a API Key do Gemini nas configurações).";
+                
+                responseText = result.response.text();
+                console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
+            } catch (aiError: any) {
+                console.error("Erro na geração de IA via WhatsApp:", aiError.message);
+                responseText = "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.";
             }
             
             // Salvar histórico

@@ -8,14 +8,19 @@ import path from "path";
 import fs from "fs";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 
 let db: any = null;
+let storage: any = null;
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    if (firebaseConfig.storageBucket) {
+       storage = getStorage(app, `gs://${firebaseConfig.storageBucket}`);
+    }
     console.log("Firebase initialized successfully");
   } else {
     console.warn("firebase-applet-config.json not found, Firebase features will fail.");
@@ -1659,6 +1664,60 @@ function getAi() {
   return aiClient;
 }
 
+const defaultSystemInstruction = `Você é o Assistente Virtual Oficial da BotoPremium, focado em ajudar os franqueados.
+Seu objetivo é responder dúvidas operacionais, de plataforma, procedimentos técnicos e de modelo de negócio com base EXCLUSIVAMENTE nos manuais em PDF fornecidos em anexo.
+
+DIRETRIZES IMPORTANTES:
+1. Leia atentamente os PDFs anexados (eles contêm textos e imagens). Interprete fluxogramas, tabelas e fotos contidas neles para responder com precisão.
+2. Se a resposta não estiver nos manuais, diga: "Desculpe, não encontrei essa informação nos manuais oficiais. Por favor, contate o suporte da franqueadora."
+3. Suas respostas devem ser CURTAS, diretas e fáceis de entender. Evite textos longos, vá direto ao ponto e use linguagem simples para que o franqueado compreenda rapidamente.
+4. Sempre que possível, cite de qual manual você tirou a informação (ex: "De acordo com o Manual Técnico...").
+5. Ao final de cada resposta, adicione uma breve orientação lembrando o franqueado que, para mais informações ou detalhes, é uma boa prática consultar os manuais de operação oficiais.`;
+
+const manualsCache: Record<string, { bufferBase64: string, lastFetched: number }> = {};
+
+async function getAgentContext(db: any) {
+  let systemInstruction = defaultSystemInstruction;
+  let inlineDatas: any[] = [];
+  
+  if (db) {
+    try {
+      const docSnap = await getDoc(doc(db, "agent_config", "default"));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.systemInstruction) systemInstruction = data.systemInstruction;
+        if (data.manuals && Array.isArray(data.manuals)) {
+          // fetch manuals concurrently
+           const manualPromises = data.manuals.map(async (m: any) => {
+             if (!manualsCache[m.url] || Date.now() - manualsCache[m.url].lastFetched > 1000 * 60 * 60 * 24) {
+               try {
+                  const res = await axios.get(m.url, { responseType: 'arraybuffer' });
+                  manualsCache[m.url] = { bufferBase64: Buffer.from(res.data).toString('base64'), lastFetched: Date.now() };
+               } catch (e: any) {
+                  console.error(`Failed to fetch manual ${m.url}:`, e.message);
+                  return null;
+               }
+             }
+             return {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: manualsCache[m.url].bufferBase64
+                }
+             };
+           });
+           
+           const results = await Promise.all(manualPromises);
+           inlineDatas = results.filter(Boolean);
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching agent context:", e);
+    }
+  }
+  
+  return { systemInstruction, inlineDatas };
+}
+
 app.post('/api/chat/message', async (req, res) => {
   try {
     const ai = getAi();
@@ -1676,14 +1735,21 @@ app.post('/api/chat/message', async (req, res) => {
       parts: [{ text: msg.text }]
     }));
     
-    // Add current message
-    formattedHistory.push({ role: 'user', parts: [{ text: message }]});
+    const { systemInstruction, inlineDatas } = await getAgentContext(db);
+    
+    // Add current message with inlineData if any
+    const userMessageParts: any[] = [{ text: message }];
+    if (inlineDatas.length > 0) {
+       userMessageParts.push(...inlineDatas);
+    }
+    
+    formattedHistory.push({ role: 'user', parts: userMessageParts});
     
     const resGemini = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: formattedHistory,
       config: {
-         systemInstruction: "Você é um especialista logístico e operacional em Botopremium. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa.",
+         systemInstruction: systemInstruction,
          temperature: 0.2
       }
     });
@@ -1775,7 +1841,14 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
               parts: [{ text: msg.text }]
             }));
             
-            formattedHistory.push({ role: 'user', parts: [{ text: msg_body }]});
+            const { systemInstruction, inlineDatas } = await getAgentContext(db);
+            
+            const userMessageParts: any[] = [{ text: msg_body }];
+            if (inlineDatas.length > 0) {
+               userMessageParts.push(...inlineDatas);
+            }
+            
+            formattedHistory.push({ role: 'user', parts: userMessageParts});
             
             let responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
             
@@ -1784,9 +1857,8 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
                   model: 'gemini-2.5-flash',
                   contents: formattedHistory,
                   config: {
-                     systemInstruction: "Você é um assistente especialista logístico e operacional em Botopremium falando pelo WhatsApp. Responda às dúvidas dos franqueados baseando-se estritamente nos processos e manuais da empresa. Seja claro e conciso.",
-                     temperature: 0.2,
-                     maxOutputTokens: 500,
+                     systemInstruction: systemInstruction,
+                     temperature: 0.2
                   }
                 });
                 
@@ -1892,6 +1964,71 @@ async function startServer() {
   });
 
   // Na Vercel, o processo de inicializaÃ§Ãƒo Ã© diferente.
+// ==========================================
+// AGENT API ROUTES
+// ==========================================
+
+app.get('/api/agent/config', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'DB not connected' });
+    const docSnap = await getDoc(doc(db, "agent_config", "default"));
+    if (docSnap.exists()) {
+      res.json(docSnap.data());
+    } else {
+      res.json({
+        systemInstruction: defaultSystemInstruction,
+        manuals: []
+      });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/agent/config', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'DB not connected' });
+    const { systemInstruction, manuals } = req.body;
+    await setDoc(doc(db, "agent_config", "default"), {
+      systemInstruction: systemInstruction || defaultSystemInstruction,
+      manuals: manuals || [],
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/agent/upload-manual', async (req, res) => {
+  try {
+    const { name, base64Data } = req.body; 
+    if (!storage) return res.status(500).json({error: "Storage not configured"});
+    
+    // Create unique filename
+    const safeName = name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storageRef = ref(storage, \`manuals/\${Date.now()}_\${safeName}\`);
+    const snapshot = await uploadString(storageRef, base64Data, 'data_url');
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    res.json({ success: true, name, url: downloadURL, path: snapshot.ref.fullPath });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/agent/delete-manual', async (req, res) => {
+  try {
+     const { path } = req.body;
+     if (!storage) return res.status(500).json({error: "Storage not configured"});
+     const storageRef = ref(storage, path);
+     await deleteObject(storageRef);
+     res.json({ success: true });
+  } catch (err: any) {
+     res.status(500).json({ error: err.message });
+  }
+});
+
   // NÃƒo devemos chamar app.listen() se estivermos em um ambiente serverless,
   // mas a Vercel ignora o listen() se o app for exportado.
   

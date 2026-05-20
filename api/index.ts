@@ -1882,6 +1882,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
     let body = req.body;
 
     if (body.object) {
+      if (!res.headersSent) res.sendStatus(200);
       const entry = body.entry?.[0];
       const change = entry?.changes?.[0];
       const messageObj = change?.value?.messages?.[0];
@@ -2065,13 +2066,12 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             }
         }
       }
-      res.sendStatus(200);
     } else {
-      res.sendStatus(404);
+      if (!res.headersSent) res.sendStatus(404);
     }
   } catch (error) {
     console.error('WhatsApp webhook global error:', error);
-    res.sendStatus(500);
+    if (!res.headersSent) res.sendStatus(500);
   }
 });
 

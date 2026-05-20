@@ -1615,18 +1615,79 @@ app.post("/api/debug/redis", async (req, res) => {
 // we will create an isolated verifySultsUser function
 // ==========================================
 
+async function fetchSultsEmails(): Promise<string[]> {
+  try {
+    let token = process.env.SULTS_API_TOKEN;
+    if (!token) {
+      console.warn('SULTS_API_TOKEN is not configured.');
+      return [];
+    }
+
+    // A SULTS API pode usar "Bearer " então checa se já contém ou não
+    if (token && !token.startsWith('Bearer') && token.length > 50) {
+        token = `Bearer ${token}`; // Caso precise de bearer, mas a doc diz `<token_de_acesso>` bruto dependendo da api
+    }
+
+    let allEmails: string[] = [];
+    let start = 0;
+    const limit = 100;
+
+    while (true) {
+      const response = await fetch(`https://api.sults.com.br/v1/empresas?start=${start}&limit=${limit}&ativo=true`, {
+        method: "GET",
+        headers: {
+          "Authorization": process.env.SULTS_API_TOKEN || "" // usar o original, conforme doc
+        }
+      });
+      
+      if (!response.ok) {
+        console.error(`Error fetching from SULTS API: ${response.statusText}`);
+        break;
+      }
+      
+      const empresas = await response.json();
+      if (!Array.isArray(empresas) || empresas.length === 0) {
+        break;
+      }
+
+      for (const empresa of empresas) {
+        if (Array.isArray(empresa.email)) {
+             allEmails.push(...empresa.email.map((e: string) => e.toLowerCase()));
+        }
+      }
+      
+      if (empresas.length < limit) {
+        break; // Trazemos tudo
+      }
+      start += limit;
+    }
+
+    return [...new Set(allEmails.filter(e => e))];
+  } catch (error) {
+    console.error("Failed to fetch SULTS emails:", error);
+    return [];
+  }
+}
+
+export async function verifyEmailIsSultsAuthorized(email: string): Promise<boolean> {
+  const whitelist = ['brunoallan004@gmail.com'];
+  if (whitelist.includes(email)) {
+     return true;
+  }
+  
+  const sultsEmails = await fetchSultsEmails();
+  return sultsEmails.includes(email);
+}
+
 const verificationCodes = new Map<string, string>();
 
 app.post('/api/auth/send-code', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
   
-  // Lista temporária até integrarmos listagem completa do SULTS
-  const whitelist = ['brunoallan004@gmail.com', 'lha.gomes01@gmail.com'];
-  if (!email.endsWith('@botopremium.com.br') && !whitelist.includes(email)) {
-    return res.status(403).json({ error: 'Email não autorizado. Use seu email corporativo da Boto Premium.' });
-  }
-  
+  // O usuário informou que no painel web, a validação SULTS não é necessária, pois ele já fez login na plataforma.
+  // Vamos remover a checagem 'verifyEmailIsSultsAuthorized' aqui.
+
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   verificationCodes.set(email, code);
   
@@ -1647,7 +1708,8 @@ app.post('/api/auth/send-code', async (req, res) => {
       html: `<p>Seu código de acesso é: <strong>${code}</strong></p>`
     });
   } catch (err) {
-    console.error('Failed to send verification email, using console log fallback');
+    console.error('Failed to send verification email, using console log fallback', err);
+    return res.status(500).json({ success: false, error: 'Falha ao enviar email. A senha de app do Gmail pode ter expirado.' });
   }
 
   res.json({ success: true, message: 'Código enviado' });
@@ -1835,67 +1897,146 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         console.log(`[WhatsApp] Mensagem recebida de ${from}: "${msg_body}"`);
         
         if (msg_body) {
-            // Gerar resposta com Gemini
-            const ai = getAi();
             let history: any[] = [];
-            
+            let authStatus = 'pending_email';
+            let authEmail: string | null = null;
+            let authCode: string | null = null;
+            let updatedAt = new Date(0).toISOString();
+            const now = new Date();
+
             if (db) {
                try {
                    const docSnap = await getDoc(doc(db, "whatsapp_chats", from));
                    if (docSnap.exists()) {
-                      history = docSnap.data().messages || [];
+                      const data = docSnap.data();
+                      history = data.messages || [];
+                      authStatus = data.authStatus || 'pending_email';
+                      authEmail = data.authEmail || null;
+                      authCode = data.authCode || null;
+                      updatedAt = data.updatedAt || updatedAt;
                    }
                } catch (e) {
                    console.error("Erro ao buscar histórico do firebase:", e);
                }
             }
-            
-            const formattedHistory = history.map((msg: any) => ({
-              role: msg.role === 'user' ? 'user' : 'model',
-              parts: [{ text: msg.text }]
-            }));
-            
-            const { systemInstruction, inlineDatas } = await getAgentContext(db);
-            
-            const userMessageParts: any[] = [{ text: msg_body }];
-            if (inlineDatas.length > 0) {
-               userMessageParts.push(...inlineDatas);
+
+            const timeSinceLastActivity = now.getTime() - new Date(updatedAt).getTime();
+            // Reseta se passar de 24h (86400000 ms)
+            if (timeSinceLastActivity > 24 * 60 * 60 * 1000) {
+                authStatus = 'pending_email';
+                authEmail = null;
+                authCode = null;
             }
-            
-            formattedHistory.push({ role: 'user', parts: userMessageParts});
-            
-            let responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
-            
-            try {
-                const resGemini = await ai.models.generateContent({
-                  model: 'gemini-2.5-flash',
-                  contents: formattedHistory,
-                  config: {
-                     systemInstruction: systemInstruction,
-                     temperature: 0.2
-                  }
-                });
+
+            let responseText = "";
+            let generatedByAI = false;
+
+            if (authStatus === 'pending_email') {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                const extractedEmail = msg_body.trim().toLowerCase();
                 
-                responseText = resGemini.text;
-                console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
-            } catch (aiError: any) {
-                console.error("Erro na geração de IA via WhatsApp:", aiError.message);
-                responseText = "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.";
+                if (emailRegex.test(extractedEmail)) {
+                    const isAuthorized = await verifyEmailIsSultsAuthorized(extractedEmail);
+                    if (isAuthorized) {
+                        authEmail = extractedEmail;
+                        authCode = Math.floor(100000 + Math.random() * 900000).toString();
+                        authStatus = 'pending_code';
+                        
+                        try {
+                            const transporter = nodemailer.createTransport({
+                              service: 'gmail',
+                              auth: {
+                                user: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
+                                pass: process.env.EMAIL_PASS || 'lfwp wmnp vssr ewtm'
+                              }
+                            });
+                            await transporter.sendMail({
+                              from: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
+                              to: authEmail,
+                              subject: 'Seu código de acesso WhatsApp - BotoPremium',
+                              html: `<p>Seu código de acesso para o assistente de IA no WhatsApp é: <strong>${authCode}</strong></p>`
+                            });
+                            responseText = `Um código de acesso foi enviado para ${authEmail}. Por favor, responda com o código de 6 dígitos para acessar o assistente.`;
+                        } catch (err) {
+                            console.error('Erro ao enviar email de autenticação WhatsApp:', err);
+                            responseText = `Houve um erro ao enviar o código para ${authEmail}. Tente novamente mais tarde.`;
+                            authStatus = 'pending_email';
+                        }
+                    } else {
+                        responseText = "Email não autorizado. Use o email cadastrado na plataforma SULTS. Por favor, envie seu email novamente:";
+                    }
+                } else {
+                    responseText = "Olá! Para acessar o assistente de IA da Boto Premium, por favor, envie o seu email de franqueado cadastrado no Sults:";
+                }
+            } 
+            else if (authStatus === 'pending_code') {
+                const cleanMsg = msg_body.trim();
+                if (cleanMsg === authCode) {
+                    authStatus = 'authenticated';
+                    responseText = "Código aceito! Você está autorizado. Como posso ajudar com os manuais hoje?";
+                } else {
+                    authStatus = 'pending_email';
+                    authEmail = null;
+                    authCode = null;
+                    responseText = "Código incorreto. A verificação foi reiniciada. Por favor, envie seu email de franqueado novamente para receber um novo código:";
+                }
+            } 
+            else if (authStatus === 'authenticated') {
+                generatedByAI = true;
+                const ai = getAi();
+                
+                const formattedHistory = history.map((msg: any) => ({
+                  role: msg.role === 'user' ? 'user' : 'model',
+                  parts: [{ text: msg.text }]
+                }));
+                
+                const { systemInstruction, inlineDatas } = await getAgentContext(db);
+                
+                const userMessageParts: any[] = [{ text: msg_body }];
+                if (inlineDatas.length > 0) {
+                   userMessageParts.push(...inlineDatas);
+                }
+                
+                formattedHistory.push({ role: 'user', parts: userMessageParts});
+                
+                responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
+                
+                try {
+                    const resGemini = await ai.models.generateContent({
+                      model: 'gemini-2.5-flash',
+                      contents: formattedHistory,
+                      config: {
+                         systemInstruction: systemInstruction,
+                         temperature: 0.2
+                      }
+                    });
+                    
+                    responseText = resGemini.text;
+                    console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
+                } catch (aiError: any) {
+                    console.error("Erro na geração de IA via WhatsApp:", aiError.message);
+                    responseText = "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.";
+                }
             }
-            
-            // Salvar histórico
-            const newMessages = [
-              ...history, 
-              { role: 'user', text: msg_body }, 
-              { role: 'model', text: responseText }
-            ].slice(-40);
             
             if (db) {
               try {
-                  await setDoc(doc(db, "whatsapp_chats", from), {
-                    messages: newMessages,
-                    updatedAt: new Date().toISOString()
-                  }, { merge: true });
+                  const updateData: any = {
+                      authStatus,
+                      authEmail,
+                      authCode,
+                      updatedAt: now.toISOString()
+                  };
+                  
+                  if (generatedByAI) {
+                      updateData.messages = [
+                        ...history, 
+                        { role: 'user', text: msg_body }, 
+                        { role: 'model', text: responseText }
+                      ].slice(-40);
+                  }
+                  
+                  await setDoc(doc(db, "whatsapp_chats", from), updateData, { merge: true });
               } catch (e) {
                   console.error("Erro ao salvar histórico do firebase:", e);
               }

@@ -1,5 +1,6 @@
 {
-  "name": "Dashboard de Expansão",
+  "name": "Dashboard Botopremium",
   "description": "Dashboard estratégico de expansão integrado com RD Station e Conta Azul.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

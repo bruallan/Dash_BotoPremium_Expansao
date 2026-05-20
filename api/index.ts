@@ -1877,17 +1877,29 @@ app.get('/api/whatsapp/webhook', (req, res) => {
   }
 });
 
+const processedWhatsAppMessages = new Set<string>();
+
 app.post('/api/whatsapp/webhook', async (req, res) => {
   try {
     let body = req.body;
 
     if (body.object) {
-      if (!res.headersSent) res.sendStatus(200);
       const entry = body.entry?.[0];
       const change = entry?.changes?.[0];
       const messageObj = change?.value?.messages?.[0];
 
       if (messageObj) {
+        const msgId = messageObj.id;
+        if (msgId) {
+          if (processedWhatsAppMessages.has(msgId)) {
+            // Se já processou esta mensagem (retentativa do webhook), envia 200 e ignora
+            return res.status(200).send('OK');
+          }
+          processedWhatsAppMessages.add(msgId);
+          // Manter o Set limpo, removendo após 5 minutos
+          setTimeout(() => processedWhatsAppMessages.delete(msgId), 5 * 60 * 1000);
+        }
+
         // Credenciais fornecidas pelo usuário
         const phone_number_id = process.env.WHATSAPP_PHONE_ID || '1166257203227529';
         const whatsapp_token = process.env.WHATSAPP_TOKEN || 'EAAi9ZAZAvaAqQBRbY1KpELQn5KxQ4J9qUHYhmWpDQpY5ZCNknGaHnZCeVQoNYCHYJV8zbGD0ZC8IoK4MRmFXV6f9mqpmMuvMkPlIFmCMjnJm1yJ8ZCJ8UoCQdERZA9JwBWeuik5hTtZA24kUFxORTsKHvxItYhCMJIYPZALVunQZBOTxiqBpN5SUTZA6tmsqEHadO23dgZDZD';
@@ -2066,6 +2078,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             }
         }
       }
+      if (!res.headersSent) res.sendStatus(200);
     } else {
       if (!res.headersSent) res.sendStatus(404);
     }

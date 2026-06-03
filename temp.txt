@@ -1,0 +1,11 @@
+66:    const { saldoCaixaAtual = 0, eventos = [], contratos = [] } = data || {};
+70:        eventos.forEach((e: any) => {
+74:    }, [eventos]);
+78:        eventos.forEach((e: any) => {
+82:    }, [eventos]);
+85:        return eventos.filter((e: any) => {
+98:    }, [eventos, filterStartDate, filterEndDate, filterCC]);
+198:        // Calculos baseados no eventos GERAIS e não filtrados (Runway, Safra)
+200:        const sum3 = eventos.filter((e:any) => e.tipo === 'DESPESA' && e.status === 'RECEBIDO' && isDespesaOperacional(e) && new Date(e.data_vencimento) > limit3).reduce((acc: number, e: any) => acc + e.pago, 0);
+223:                const pg = eventos.filter((e:any) => e.tipo === 'RECEITA' && e.status === 'RECEBIDO' && e.cliente?.id === c.cliente_id && checkCategoria(e, 'royalt'));
+272:    }, [filteredEventos, eventos, saldoCaixaAtual, contratos]);

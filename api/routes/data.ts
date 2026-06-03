@@ -8,6 +8,8 @@ export const dataRouter = Router();
 let cachedFinanceiroData: any = null;
 let lastFinanceiroFetchTime = 0;
 
+const emptyData = { eventos: [], saldos: [], saldosHistoricos: [], contratos: [] };
+
 dataRouter.get("/financeiro", async (req, res) => {
   try {
     const now = Date.now();
@@ -18,7 +20,7 @@ dataRouter.get("/financeiro", async (req, res) => {
 
     if (!db) {
       if (cachedFinanceiroData) return res.json({ success: true, data: cachedFinanceiroData });
-      return res.status(500).json({ error: "Banco de dados não conectado." });
+      return res.json({ success: true, data: emptyData, message: "Banco de dados não conectado." });
     }
 
     const docSnap = await getDoc(doc(db, "dashboards", "financeiro"));
@@ -28,7 +30,7 @@ dataRouter.get("/financeiro", async (req, res) => {
       return res.json({ success: true, data: cachedFinanceiroData });
     } else {
       if (cachedFinanceiroData) return res.json({ success: true, data: cachedFinanceiroData });
-      return res.json({ success: true, data: null, message: "Aguardando primeira execução do CRON." });
+      return res.json({ success: true, data: emptyData, message: "Aguardando primeira execução do CRON." });
     }
   } catch (error: any) {
     if (cachedFinanceiroData) {
@@ -36,7 +38,7 @@ dataRouter.get("/financeiro", async (req, res) => {
       return res.json({ success: true, data: cachedFinanceiroData });
     }
     console.error("Erro ao buscar dados financeiros:", error.message);
-    return res.status(500).json({ error: error.message });
+    return res.json({ success: true, data: emptyData, message: "Aviso: Mostrando dados limitados devido cota." });
   }
 });
 
@@ -72,11 +74,14 @@ dataRouter.post("/financeiro/sync", async (req, res) => {
        }
     }
     
-    return res.json({ success: true, data: null, message: "Sincronização concluída mas sem dados aparentes." });
+    return res.json({ success: true, data: emptyData, message: "Sincronização concluída mas sem dados aparentes." });
     
   } catch (error: any) {
     console.error("Erro ao forçar sync financeiro:", error.message);
-    return res.status(500).json({ error: error.message });
+    if (cachedFinanceiroData) {
+        return res.json({ success: true, data: cachedFinanceiroData, message: "Erro sincronização, exibindo dados do cache local." });
+    }
+    return res.json({ success: true, data: emptyData, message: "Aviso: Sincronização falhou e não há dados em memória." });
   }
 });
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { db, doc, getDoc, setDoc, request, fetchAllPages } from '../index';
-import { runFinanceCron } from '../services/financeCron';
+import { db, doc, getDoc, setDoc, request, fetchAllPages } from '../index.js';
+import { runFinanceCron } from '../services/financeCron.js';
 
 export const dataRouter = Router();
 

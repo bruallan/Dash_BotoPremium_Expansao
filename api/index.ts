@@ -1703,10 +1703,10 @@ export async function verifyEmailIsSultsAuthorized(email: string): Promise<boole
 }
 
 // Routes
-import { authRouter } from './routes/auth';
-import { whatsappRouter } from './routes/whatsapp';
-import { dataRouter } from './routes/data';
-import { debugRouter } from './routes/debug';
+import { authRouter } from './routes/auth.js';
+import { whatsappRouter } from './routes/whatsapp.js';
+import { dataRouter } from './routes/data.js';
+import { debugRouter } from './routes/debug.js';
 
 // Rotas Integradas
 app.use('/api/auth', authRouter);

@@ -12,6 +12,7 @@ import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "fir
 
 let db: any = null;
 let storage: any = null;
+export { db, doc, getDoc, setDoc };
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
@@ -310,25 +311,47 @@ let currentRefreshToken: string | null = null;
 let tokenRefreshPromise: Promise<string> | null = null;
 
 export async function getStoredTokens(): Promise<{ access_token?: string; refresh_token?: string } | null> {
-  if (!db) return null;
+  const now = Date.now();
+  
+  // Mem cache (5 mins) avoids Firestore Quota Exceeded for read units
+  if (currentAccessToken && currentRefreshToken && (now - (global as any).lastTokenFetchTime < 5 * 60 * 1000)) {
+    return {
+      access_token: currentAccessToken,
+      refresh_token: currentRefreshToken
+    };
+  }
+
+  if (!db) {
+    if (currentAccessToken || currentRefreshToken) {
+      return {
+        access_token: currentAccessToken || undefined,
+        refresh_token: currentRefreshToken || undefined
+      };
+    }
+    return null;
+  }
 
   try {
     const docSnap = await getDoc(doc(db, "tokens", "conta_azul"));
+    (global as any).lastTokenFetchTime = Date.now();
+    
     if (docSnap.exists()) {
       const tokenData = docSnap.data();
       if (tokenData && (tokenData.access_token || tokenData.refresh_token)) {
         currentAccessToken = tokenData.access_token || currentAccessToken;
         currentRefreshToken = tokenData.refresh_token || currentRefreshToken;
-        return tokenData as any;
+        return {
+           access_token: currentAccessToken || undefined,
+           refresh_token: currentRefreshToken || undefined
+        };
       }
     }
-  } catch (e) {
-    console.error("Erro ao ler tokens do Firebase:", e);
+  } catch (e: any) {
+    console.error("Erro ao ler tokens do Firebase:", e.message);
   }
   
-  // Fallback to local memory if Firebase fails
+  // Fallback
   if (currentAccessToken || currentRefreshToken) {
-    console.log("Firebase read failed, returning tokens from local memory cache.");
     return {
       access_token: currentAccessToken || undefined,
       refresh_token: currentRefreshToken || undefined
@@ -554,7 +577,7 @@ async function refreshToken() {
   return tokenRefreshPromise;
 }
 
-async function request(
+export async function request(
   method: string,
   url: string,
   params: any = {},
@@ -627,7 +650,7 @@ async function request(
   }
 }
 
-async function fetchAllPages(
+export async function fetchAllPages(
   url: string,
   params: any = {},
   signal?: AbortSignal,
@@ -1679,53 +1702,19 @@ export async function verifyEmailIsSultsAuthorized(email: string): Promise<boole
   return sultsEmails.includes(email);
 }
 
-const verificationCodes = new Map<string, string>();
+// Routes
+import { authRouter } from './routes/auth';
+import { whatsappRouter } from './routes/whatsapp';
+import { dataRouter } from './routes/data';
+import { debugRouter } from './routes/debug';
 
-app.post('/api/auth/send-code', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-  
-  // O usuário informou que no painel web, a validação SULTS não é necessária, pois ele já fez login na plataforma.
-  // Vamos remover a checagem 'verifyEmailIsSultsAuthorized' aqui.
+// Rotas Integradas
+app.use('/api/auth', authRouter);
+app.use('/api/whatsapp', whatsappRouter);
+app.use('/api/data', dataRouter);
+app.use('/api/debug', debugRouter);
 
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  verificationCodes.set(email, code);
-  
-  console.log(`[AUTH] Verification code for ${email}: ${code}`);
-  
-  try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
-        pass: process.env.EMAIL_PASS || 'lfwp wmnp vssr ewtm'
-      }
-    });
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
-      to: email,
-      subject: 'Seu código de acesso - BotoPremium',
-      html: `<p>Seu código de acesso é: <strong>${code}</strong></p>`
-    });
-  } catch (err) {
-    console.error('Failed to send verification email, using console log fallback', err);
-    return res.status(500).json({ success: false, error: 'Falha ao enviar email. A senha de app do Gmail pode ter expirado.' });
-  }
-
-  res.json({ success: true, message: 'Código enviado' });
-});
-
-app.post('/api/auth/verify-code', async (req, res) => {
-  const { email, code } = req.body;
-  
-  // Accept hardcoded for testing only if code matches
-  if (verificationCodes.get(email) === code || code === '123456') {
-    verificationCodes.delete(email);
-    res.json({ success: true, token: email });
-  } else {
-    res.status(400).json({ success: false, error: 'Código inválido' });
-  }
-});
+// (A migração completa do corpo das rotas antigas está em transição para esses arquivos)
 
 import { GoogleGenAI } from '@google/genai';
 
@@ -2107,6 +2096,16 @@ app.get('/api/chat/history', async (req, res) => {
 });
 
 async function startServer() {
+  // Cron Financeiro (Atualiza diariamente as 01:00)
+  cron.schedule('0 1 * * *', async () => {
+    try {
+      const { runFinanceCron } = await import('./services/financeCron');
+      await runFinanceCron(request, fetchAllPages, db, setDoc, doc);
+    } catch(err) {
+      console.error('[CRON LOADER] Erro ao carregar/executar cron financeiro:', err);
+    }
+  });
+
   // Cron Job (Atualiza diariamente as 03:00)
   cron.schedule('0 3 * * *', async () => {
     console.log('[CRON] Iniciando sincronização diária do Conta Azul/RD...');

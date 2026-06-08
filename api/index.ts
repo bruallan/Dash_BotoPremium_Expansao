@@ -1646,20 +1646,15 @@ async function fetchSultsEmails(): Promise<string[]> {
       return [];
     }
 
-    // A SULTS API pode usar "Bearer " então checa se já contém ou não
-    if (token && !token.startsWith('Bearer') && token.length > 50) {
-        token = `Bearer ${token}`; // Caso precise de bearer, mas a doc diz `<token_de_acesso>` bruto dependendo da api
-    }
-
     let allEmails: string[] = [];
     let start = 0;
     const limit = 100;
 
     while (true) {
-      const response = await fetch(`https://api.sults.com.br/v1/empresas?start=${start}&limit=${limit}&ativo=true`, {
+      const response = await fetch(`https://api.sults.com.br/v1/pessoas?start=${start}&limit=${limit}`, {
         method: "GET",
         headers: {
-          "Authorization": process.env.SULTS_API_TOKEN || "" // usar o original, conforme doc
+          "Authorization": process.env.SULTS_API_TOKEN || ""
         }
       });
       
@@ -1668,18 +1663,18 @@ async function fetchSultsEmails(): Promise<string[]> {
         break;
       }
       
-      const empresas = await response.json();
-      if (!Array.isArray(empresas) || empresas.length === 0) {
+      const pessoas = await response.json();
+      if (!Array.isArray(pessoas) || pessoas.length === 0) {
         break;
       }
 
-      for (const empresa of empresas) {
-        if (Array.isArray(empresa.email)) {
-             allEmails.push(...empresa.email.map((e: string) => e.toLowerCase()));
+      for (const pessoa of pessoas) {
+        if (Array.isArray(pessoa.email)) {
+             allEmails.push(...pessoa.email.map((e: string) => e.toLowerCase()));
         }
       }
       
-      if (empresas.length < limit) {
+      if (pessoas.length < limit) {
         break; // Trazemos tudo
       }
       start += limit;
@@ -1693,7 +1688,7 @@ async function fetchSultsEmails(): Promise<string[]> {
 }
 
 export async function verifyEmailIsSultsAuthorized(email: string): Promise<boolean> {
-  const whitelist = ['brunoallan004@gmail.com'];
+  const whitelist = ['brunoallan004@gmail.com', 'bruno.failli@grupoxpremium.com.br'];
   if (whitelist.includes(email)) {
      return true;
   }
@@ -1923,8 +1918,8 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             }
 
             const timeSinceLastActivity = now.getTime() - new Date(updatedAt).getTime();
-            // Reseta se passar de 24h (86400000 ms)
-            if (timeSinceLastActivity > 24 * 60 * 60 * 1000) {
+            // Reseta se passar de 15 dias (1296000000 ms)
+            if (timeSinceLastActivity > 15 * 24 * 60 * 60 * 1000) {
                 authStatus = 'pending_email';
                 authEmail = null;
                 authCode = null;
@@ -1968,7 +1963,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
                         responseText = "Email não autorizado. Use o email cadastrado na plataforma SULTS. Por favor, envie seu email novamente:";
                     }
                 } else {
-                    responseText = "Olá! Para acessar o assistente de IA da Boto Premium, por favor, envie o seu email de franqueado cadastrado no Sults:";
+                    responseText = "Olá, para poder te auxiliar em suas dúvidas sobre a Botopremium, me confirme o seu e-mail de cadastro na plataforma Sults.";
                 }
             } 
             else if (authStatus === 'pending_code') {

@@ -1688,7 +1688,7 @@ async function fetchSultsEmails(): Promise<string[]> {
 }
 
 export async function verifyEmailIsSultsAuthorized(email: string): Promise<boolean> {
-  const whitelist = ['brunoallan004@gmail.com', 'bruno.failli@grupoxpremium.com.br'];
+  const whitelist = ['alan@botopremium.com.br', 'dalia.angelim@grupoxpremium.com.br', 'bruno.failli@grupoxpremium.com.br', 'brunoallan004@gmail.com', 'cyntia.macario@grupoxpremium.com.br', 'evandro.ricardo@grupoxpremium.com.br', 'flavio.vieira@grupoxpremium.com.br', 'gabriela.failli@grupoxpremium.com.br', 'henrique.hugo@grupoxpremium.com.br', 'iris.silvestre@grupoxpremium.com.br', 'jaqueline.araujo@grupoxpremium.com.br', 'jessica.brito@grupoxpremium.com.br', 'lucas.borim@grupoxpremium.com.br', 'manoel.ferreira@grupoxpremium.com.br', 'polyana.albuquerque@grupoxpremium.com.br', 'rodrigo.dpaula@grupoxpremium.com.br', 'tatiane.farias@grupoxpremium.com.br', 'thais.ogalla@grupoxpremium.com.br', 'comercial.ative.mkt@gmail.com'];
   if (whitelist.includes(email)) {
      return true;
   }

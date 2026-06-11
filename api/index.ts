@@ -885,10 +885,10 @@ app.get("/api/debug/check-token", async (req, res) => {
     res.json({
       success: true,
       data: {
-        redis_access_token: maskToken(tokens?.access_token),
-        redis_refresh_token: maskToken(tokens?.refresh_token),
+        firebase_access_token: maskToken(tokens?.access_token),
+        firebase_refresh_token: maskToken(tokens?.refresh_token),
         env_refresh_token: maskToken(process.env.CONTA_AZUL_REFRESH_TOKEN),
-        raw_redis_data: tokens
+        raw_firebase_data: tokens
       }
     });
   } catch (error: any) {
@@ -1578,61 +1578,17 @@ app.get("/api/rd-crm", async (req, res) => {
 
 // Debug endpoint to clear Redis tokens if they get stuck
 app.get("/api/debug/clear-tokens", async (req, res) => {
-  try {
-    const { createClient } = await import("redis");
-    const client = createClient({ url: process.env.REDIS_URL });
-    await client.connect();
-    await client.del("conta_azul_tokens_v2");
-    await client.disconnect();
-    res.json({ success: true, message: "Redis tokens cleared. System will fallback to environment variables on next request." });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  res.json({ success: true, message: "Redis is deprecated. Using Firebase." });
 });
 
 // Debug endpoint to view all Redis keys and values
 app.get("/api/debug/redis", async (req, res) => {
-  try {
-    const { createClient } = await import("redis");
-    const client = createClient({ url: process.env.REDIS_URL });
-    await client.connect();
-    const keys = await client.keys('*');
-    const data: Record<string, any> = {};
-    for (const key of keys) {
-      const value = await client.get(key);
-      const stringKey = String(key);
-      try {
-        data[stringKey] = JSON.parse(value as string);
-      } catch {
-        data[stringKey] = value;
-      }
-    }
-    await client.disconnect();
-    res.json({ success: true, data });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  res.json({ success: true, data: { status: "Redis is deprecated. Data is now in Firebase." } });
 });
 
 // Debug endpoint to update a Redis key
 app.post("/api/debug/redis", async (req, res) => {
-  try {
-    const { key, value } = req.body;
-    if (!key || value === undefined) {
-      return res.status(400).json({ success: false, error: "Missing key or value" });
-    }
-    const { createClient } = await import("redis");
-    const client = createClient({ url: process.env.REDIS_URL });
-    await client.connect();
-    
-    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-    await client.set(key, stringValue);
-    
-    await client.disconnect();
-    res.json({ success: true, message: `Key ${key} updated successfully.` });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  res.json({ success: true, message: "Redis is deprecated." });
 });
 
 

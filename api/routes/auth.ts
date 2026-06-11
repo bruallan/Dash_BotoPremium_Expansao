@@ -27,14 +27,16 @@ authRouter.post('/send-code', async (req, res) => {
   
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+      port: parseInt(process.env.SMTP_PORT || '465'),
+      secure: process.env.SMTP_SECURE !== 'false',
       auth: {
-        user: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
-        pass: process.env.EMAIL_PASS || 'lfwp wmnp vssr ewtm'
+        user: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
+        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
       }
     });
     await transporter.sendMail({
-      from: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
+      from: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
       to: email,
       subject: 'Seu código de acesso - BotoPremium',
       html: `<p>Seu código de acesso é: <strong>${code}</strong></p>`

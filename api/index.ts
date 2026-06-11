@@ -377,15 +377,17 @@ async function getStoredRefreshToken(): Promise<string> {
 async function sendEmailNotification(accessToken: string, refreshToken: string) {
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+      port: parseInt(process.env.SMTP_PORT || '465'),
+      secure: process.env.SMTP_SECURE !== 'false',
       auth: {
-        user: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
-        pass: process.env.EMAIL_PASS || 'lfwp wmnp vssr ewtm'
+        user: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
+        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
       }
     });
 
     const mailOptions = {
-      from: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
+      from: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
       to: process.env.EMAIL_TO || 'mr.allanbruno@gmail.com',
       subject: '⚠️ CONTA AZUL - TOKENS ATUALIZADOS',
       html: `
@@ -1941,17 +1943,26 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
                         
                         try {
                             const transporter = nodemailer.createTransport({
-                              service: 'gmail',
+                              host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+                              port: parseInt(process.env.SMTP_PORT || '465'),
+                              secure: process.env.SMTP_SECURE !== 'false',
                               auth: {
-                                user: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
-                                pass: process.env.EMAIL_PASS || 'lfwp wmnp vssr ewtm'
+                                user: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
+                                pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
                               }
                             });
                             await transporter.sendMail({
-                              from: process.env.EMAIL_USER || 'brunoallan004@gmail.com',
+                              from: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
                               to: authEmail,
                               subject: 'Seu código de acesso WhatsApp - BotoPremium',
-                              html: `<p>Seu código de acesso para o assistente de IA no WhatsApp é: <strong>${authCode}</strong></p>`
+                              html: `<p>Olá,
+                              
+                              Seu código de acesso para conversar com a VitorIA no WhatsApp é: <strong>${authCode}</strong>
+                              
+                              Atenciosamente
+                              Equipe Botopremium
+                              
+                              Obs: e-mail enviado automaticamente, favor nao responder.</p>`
                             });
                             responseText = `Um código de acesso foi enviado para ${authEmail}. Por favor, responda com o código de 6 dígitos para acessar o assistente.`;
                         } catch (err) {

@@ -547,27 +547,30 @@ export function OperacoesDashboard({ user, onBack }: any) {
     ];
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center">
+        <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8 w-full font-sans selection:bg-amber-100 selection:text-amber-900">
+            <div className="max-w-[1600px] mx-auto w-full">
             {/* Header global padrao */}
-            <div className="w-full bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="h-10 object-contain" referrerPolicy="no-referrer" />
-                        <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-                           <Settings className="w-6 h-6 text-amber-600"/> OPERAÇÕES
-                        </h1>
+            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
+                <div className="flex items-center gap-4 w-full xl:w-auto">
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 overflow-hidden shrink-0">
+                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-1.5" referrerPolicy="no-referrer" />
                     </div>
-                    
-                    <div className="flex items-center gap-6 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 hide-scrollbar">
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tight text-gray-900 leading-none mb-1">OPERAÇÕES</h1>
+                        <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-[0.2em] leading-none">Painel de Controle Estratégico</p>
+                    </div>
+                </div>
+                
+                <div className="w-full xl:w-auto mt-4 xl:mt-0">
+                    <div className="flex flex-wrap items-center justify-start xl:justify-end gap-4 md:gap-6">
                         {TABS.map((tab) => (
-                            <button 
+                            <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 pb-2 border-b-4 transition-all whitespace-nowrap px-1 font-bold ${
+                                className={`flex items-center gap-2 text-sm font-bold transition-all duration-300 ${
                                     activeTab === tab.id 
-                                        ? 'border-amber-500 text-amber-600' 
-                                        : 'border-transparent text-gray-400 hover:text-gray-700'
+                                        ? 'bg-gradient-to-r from-amber-500 to-amber-550 text-white px-6 py-2.5 rounded-2xl shadow-md shadow-amber-500/30' 
+                                        : 'text-gray-500 hover:text-amber-600'
                                 }`}
                             >
                                 <tab.icon className="w-4 h-4 shrink-0" />
@@ -583,14 +586,21 @@ export function OperacoesDashboard({ user, onBack }: any) {
                         </button>
                     </div>
                 </div>
-            </div>
+            </header>
 
             {/* Content */}
-            <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="pb-10">
+                <div className="mb-8 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-3xl font-black text-gray-900 flex items-center gap-3">{activeTab}</h2>
+                        <p className="text-sm font-medium text-gray-400 mt-1 uppercase tracking-widest">Métricas e performance em tempo real</p>
+                    </div>
+                </div>
                 {activeTab === 'Dashboard' && renderDashboard()}
                 {activeTab === 'Accountability' && renderAccountability()}
                 {activeTab === 'Simulador' && renderManutencao()}
                 {activeTab === 'Inventário' && renderInventario()}
+            </main>
             </div>
         </div>
     );

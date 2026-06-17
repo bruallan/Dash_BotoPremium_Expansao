@@ -1852,6 +1852,33 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         console.log(`[WhatsApp] Mensagem recebida de ${from}: "${msg_body}"`);
         
         if (msg_body) {
+            // --- VERIFICAÇÃO DE NÚMEROS PERMITIDOS ---
+            const ALLOWED_NUMBERS = ['5575998301466', '5517996658857'];
+            const normalizedFrom = from.replace('+', '');
+            
+            if (!ALLOWED_NUMBERS.includes(normalizedFrom)) {
+                console.log(`[WhatsApp] Número não autorizado tentou acessar: ${normalizedFrom}`);
+                try {
+                    await axios({
+                        method: 'POST',
+                        url: `https://graph.facebook.com/v21.0/${phone_number_id}/messages`,
+                        headers: {
+                            'Authorization': `Bearer ${whatsapp_token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        data: {
+                            messaging_product: 'whatsapp',
+                            to: from,
+                            text: { body: "Este número não está validado em nosso sistema para a utilização do assistente da Botopremium." }
+                        }
+                    });
+                } catch (err) {
+                    console.error("Erro ao enviar mensagem de não autorizado", err);
+                }
+                return res.status(200).send('OK');
+            }
+            // -----------------------------------------
+
             let history: any[] = [];
             let authStatus = 'pending_email';
             let authEmail: string | null = null;

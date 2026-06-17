@@ -379,15 +379,15 @@ async function sendEmailNotification(accessToken: string, refreshToken: string) 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
       port: parseInt(process.env.SMTP_PORT || '465'),
-      secure: process.env.SMTP_SECURE !== 'false',
+      secure: true,
       auth: {
-        user: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
-        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
+        user: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
+        pass: process.env.SMTP_PASS || 'BP2027@premium'
       }
     });
 
     const mailOptions = {
-      from: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
+      from: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
       to: process.env.EMAIL_TO || 'mr.allanbruno@gmail.com',
       subject: '⚠️ CONTA AZUL - TOKENS ATUALIZADOS',
       html: `
@@ -1901,14 +1901,14 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
                             const transporter = nodemailer.createTransport({
                               host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
                               port: parseInt(process.env.SMTP_PORT || '465'),
-                              secure: process.env.SMTP_SECURE !== 'false',
+                              secure: true,
                               auth: {
-                                user: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
-                                pass: process.env.SMTP_PASS || process.env.EMAIL_PASS
+                                user: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
+                                pass: process.env.SMTP_PASS || 'BP2027@premium'
                               }
                             });
                             await transporter.sendMail({
-                              from: process.env.SMTP_USER || process.env.EMAIL_USER || 'administrativo@botopremium.com.br',
+                              from: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
                               to: authEmail,
                               subject: 'Seu código de acesso WhatsApp - BotoPremium',
                               html: `<p>Olá,

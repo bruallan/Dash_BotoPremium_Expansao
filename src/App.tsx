@@ -14,6 +14,7 @@ import { SectorSelection } from './components/SectorSelection';
 
 import { LoginScreen } from './components/LoginScreen';
 import { FinancialSector } from './components/sectors/FinancialSector';
+import { OperacoesDashboard } from './components/OperacoesDashboard';
 
 const ViewLogs = ({ apiData }: any) => {
     const logs = apiData?.debug?.logs || [];
@@ -1164,6 +1165,10 @@ export default function App() {
 
     if (activeSector === 'franqueado') {
         return <FranqueadoDashboard user={user} onBack={() => setActiveSector(null)} />;
+    }
+
+    if (activeSector === 'operacoes') {
+        return <OperacoesDashboard user={user} onBack={() => setActiveSector(null)} />;
     }
 
     if (activeSector !== 'expansao') {

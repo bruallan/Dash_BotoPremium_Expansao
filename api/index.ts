@@ -1819,6 +1819,123 @@ app.get('/api/whatsapp/webhook', (req, res) => {
   }
 });
 
+// --- SULTS CONTACT CACHING ---
+let sultsContactsCache: string[] = [];
+let lastSultsFetch = 0;
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+async function fetchSultsContacts(): Promise<string[]> {
+    const token = process.env.SULTS_API_TOKEN || process.env.SULTS_TOKEN;
+    if (!token) {
+        console.warn('[SULTS] SULTS_API_TOKEN não configurado. Ignorando busca na API Sults.');
+        return [];
+    }
+
+    try {
+        const lista_final: string[] = [];
+        let pagina_atual = 0;
+        const limite_por_pagina = 100;
+        let buscando_dados = true;
+        console.log("[SULTS] Iniciando a busca de colaboradores...");
+
+        while (buscando_dados) {
+            const url = `https://api.sults.com.br/v1/pessoas?start=${pagina_atual}&limit=${limite_por_pagina}`;
+            const response = await axios.get(url, {
+                headers: { 'Authorization': token }
+            });
+            const dados = response.data;
+
+            if (!dados || dados.length === 0) {
+                buscando_dados = false;
+                console.log("[SULTS] Busca concluída!");
+            } else {
+                for (const pessoa of dados) {
+                    let numero_contato = "";
+                    if (pessoa.celular && pessoa.celular.length > 0) {
+                        numero_contato = pessoa.celular[0];
+                    } else if (pessoa.telefone && pessoa.telefone.length > 0) {
+                        numero_contato = pessoa.telefone[0];
+                    }
+                    if (numero_contato) {
+                        const cleanNum = numero_contato.replace(/\D/g, '');
+                        if (cleanNum) lista_final.push(cleanNum);
+                    }
+                }
+                pagina_atual += 1;
+            }
+        }
+        return lista_final;
+    } catch (error) {
+        console.error('[SULTS] Ocorreu um erro na requisição:', error);
+        return [];
+    }
+}
+
+async function getPermittedNumbers(): Promise<string[]> {
+    const now = Date.now();
+    if (now - lastSultsFetch > CACHE_TTL) {
+        sultsContactsCache = await fetchSultsContacts();
+        lastSultsFetch = now;
+    }
+
+    const HARDCODED_LIST = [
+        '5575999237576', // Alan Macário
+        '5581993813121', // Ana Dalia Angelim Paiva
+        '5517996658857', // Bruno Failli
+        '5575998301466', // Bruno Silva
+        '5575999604669', // CCN Contabilidade
+        '5575999777574', // Cyntia Macário
+        '5517996370518', // Evandro Ricardo
+        '5517991379301', // Flávio Vieira
+        '5517991364854', // Gabriela Failli
+        '5517991354857', // Henrique dos Santos
+        '5517992205435', // Iris Silvestre
+        '5575991958120', // Jaqueline Araújo
+        '5579998160239', // Jessica Brito
+        '5517996112077', // Jurídico Botopremium
+        '5551995086062', // Luana Decker
+        '5517997448314', // Lucas Borim
+        '5575998814762', // Manoel Ferreira
+        '5581995262227', // Polyana Vicente de Albuquerque Costa
+        '5517991945158', // Rodrigo DPaula
+        '5517991452114', // SPA Solutions
+        '5521973145776', '5521991600860', // Tatiane Martins Farias
+        '5511970700245', // Thais Ogalla Benedito
+        
+        '557598301466', '551796658857'
+    ];
+
+    return [...HARDCODED_LIST, ...sultsContactsCache];
+}
+
+function checkIsNumberAllowed(allowedNumbers: string[], rawFrom: string): boolean {
+    const cleanFrom = rawFrom.replace(/\D/g, '');
+    let check1 = cleanFrom;
+    let check2 = cleanFrom;
+
+    if (cleanFrom.startsWith('55') && cleanFrom.length >= 12) {
+        const ddd = cleanFrom.substring(2, 4);
+        const numPart = cleanFrom.substring(4);
+        
+        if (numPart.length === 8) {
+            check1 = cleanFrom;
+            check2 = `55${ddd}9${numPart}`;
+        } else if (numPart.length === 9) {
+            check1 = cleanFrom;
+            check2 = `55${ddd}${numPart.substring(1)}`;
+        }
+    }
+
+    const normalizedAllowed = allowedNumbers.map(n => n.replace(/\D/g, ''));
+    if (normalizedAllowed.includes(check1) || normalizedAllowed.includes(check2)) return true;
+
+    const without55_1 = check1.startsWith('55') ? check1.substring(2) : check1;
+    const without55_2 = check2.startsWith('55') ? check2.substring(2) : check2;
+    if (normalizedAllowed.includes(without55_1) || normalizedAllowed.includes(without55_2)) return true;
+
+    return false;
+}
+
 const processedWhatsAppMessages = new Set<string>();
 
 app.post('/api/whatsapp/webhook', async (req, res) => {
@@ -1853,11 +1970,10 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         
         if (msg_body) {
             // --- VERIFICAÇÃO DE NÚMEROS PERMITIDOS ---
-            const ALLOWED_NUMBERS = ['557598301466', '5517996658857', '551796658857'];
-            const normalizedFrom = from.replace('+', '');
+            const allowedNumbers = await getPermittedNumbers();
             
-            if (!ALLOWED_NUMBERS.includes(normalizedFrom)) {
-                console.log(`[WhatsApp] Número não autorizado tentou acessar: ${normalizedFrom}`);
+            if (!checkIsNumberAllowed(allowedNumbers, from)) {
+                console.log(`[WhatsApp] Número não autorizado tentou acessar: ${from}`);
                 try {
                     await axios({
                         method: 'POST',
@@ -1880,9 +1996,6 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             // -----------------------------------------
 
             let history: any[] = [];
-            let authStatus = 'pending_email';
-            let authEmail: string | null = null;
-            let authCode: string | null = null;
             let updatedAt = new Date(0).toISOString();
             const now = new Date();
 
@@ -1892,9 +2005,6 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
                    if (docSnap.exists()) {
                       const data = docSnap.data();
                       history = data.messages || [];
-                      authStatus = data.authStatus || 'pending_email';
-                      authEmail = data.authEmail || null;
-                      authCode = data.authCode || null;
                       updatedAt = data.updatedAt || updatedAt;
                    }
                } catch (e) {
@@ -1905,121 +2015,53 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
             const timeSinceLastActivity = now.getTime() - new Date(updatedAt).getTime();
             // Reseta se passar de 15 dias (1296000000 ms)
             if (timeSinceLastActivity > 15 * 24 * 60 * 60 * 1000) {
-                authStatus = 'pending_email';
-                authEmail = null;
-                authCode = null;
+                history = [];
             }
 
             let responseText = "";
-            let generatedByAI = false;
+            let generatedByAI = true;
 
-            if (authStatus === 'pending_email') {
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                const extractedEmail = msg_body.trim().toLowerCase();
+            const ai = getAi();
+            
+            const formattedHistory = history.map((msg: any) => ({
+              role: msg.role === 'user' ? 'user' : 'model',
+              parts: [{ text: msg.text }]
+            }));
+            
+            const { systemInstruction, inlineDatas } = await getAgentContext(db);
+            
+            const userMessageParts: any[] = [{ text: msg_body }];
+            if (inlineDatas.length > 0) {
+               userMessageParts.push(...inlineDatas);
+            }
+            
+            formattedHistory.push({ role: 'user', parts: userMessageParts});
+            
+            try {
+                const resGemini = await ai.models.generateContent({
+                  model: 'gemini-2.5-flash',
+                  contents: formattedHistory,
+                  config: {
+                     systemInstruction: systemInstruction,
+                     temperature: 0.2
+                  }
+                });
                 
-                if (emailRegex.test(extractedEmail)) {
-                    const isAuthorized = await verifyEmailIsSultsAuthorized(extractedEmail);
-                    if (isAuthorized) {
-                        authEmail = extractedEmail;
-                        authCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        authStatus = 'pending_code';
-                        
-                        try {
-                            const transporter = nodemailer.createTransport({
-                              host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
-                              port: parseInt(process.env.SMTP_PORT || '465'),
-                              secure: true,
-                              auth: {
-                                user: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
-                                pass: process.env.SMTP_PASS || 'BP2027@premium'
-                              }
-                            });
-                            await transporter.sendMail({
-                              from: process.env.SMTP_USER || 'administrativo@botopremium.com.br',
-                              to: authEmail,
-                              subject: 'Seu código de acesso WhatsApp - BotoPremium',
-                              html: `<p>Olá,
-                              
-                              Seu código de acesso para conversar com a VitorIA no WhatsApp é: <strong>${authCode}</strong>
-                              
-                              Atenciosamente
-                              Equipe Botopremium
-                              
-                              Obs: e-mail enviado automaticamente, favor nao responder.</p>`
-                            });
-                            responseText = `Um código de acesso foi enviado para ${authEmail}. Por favor, responda com o código de 6 dígitos para acessar o assistente.`;
-                        } catch (err) {
-                            console.error('Erro ao enviar email de autenticação WhatsApp:', err);
-                            responseText = `Houve um erro ao enviar o código para ${authEmail}. Tente novamente mais tarde.`;
-                            authStatus = 'pending_email';
-                        }
-                    } else {
-                        responseText = "Email não autorizado. Use o email cadastrado na plataforma SULTS. Por favor, envie seu email novamente:";
-                    }
-                } else {
-                    responseText = "Olá, para poder te auxiliar em suas dúvidas sobre a Botopremium, me confirme o seu e-mail de cadastro na plataforma Sults.";
-                }
-            } 
-            else if (authStatus === 'pending_code') {
-                const cleanMsg = msg_body.trim();
-                if (cleanMsg === authCode) {
-                    authStatus = 'authenticated';
-                    responseText = "Código aceito! Você está autorizado. Como posso ajudar com os manuais hoje?";
-                } else {
-                    authStatus = 'pending_email';
-                    authEmail = null;
-                    authCode = null;
-                    responseText = "Código incorreto. A verificação foi reiniciada. Por favor, envie seu email de franqueado novamente para receber um novo código:";
-                }
-            } 
-            else if (authStatus === 'authenticated') {
-                generatedByAI = true;
-                const ai = getAi();
-                
-                const formattedHistory = history.map((msg: any) => ({
-                  role: msg.role === 'user' ? 'user' : 'model',
-                  parts: [{ text: msg.text }]
-                }));
-                
-                const { systemInstruction, inlineDatas } = await getAgentContext(db);
-                
-                const userMessageParts: any[] = [{ text: msg_body }];
-                if (inlineDatas.length > 0) {
-                   userMessageParts.push(...inlineDatas);
-                }
-                
-                formattedHistory.push({ role: 'user', parts: userMessageParts});
-                
-                responseText = "Desculpe, ocorreu um erro ao processar sua solicitação.";
-                
-                try {
-                    const resGemini = await ai.models.generateContent({
-                      model: 'gemini-2.5-flash',
-                      contents: formattedHistory,
-                      config: {
-                         systemInstruction: systemInstruction,
-                         temperature: 0.2
-                      }
-                    });
-                    
-                    responseText = resGemini.text;
-                    console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
-                } catch (aiError: any) {
-                    console.error("Erro na geração de IA via WhatsApp:", aiError.message);
-                    responseText = "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.";
-                }
+                responseText = resGemini.text;
+                console.log(`[WhatsApp] Resposta gerada pela IA: "${responseText}"`);
+            } catch (aiError: any) {
+                console.error("Erro na geração de IA via WhatsApp:", aiError.message);
+                responseText = "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.";
+                generatedByAI = false;
             }
             
             if (db) {
               try {
                   const updateData: any = {
-                      authStatus,
-                      authEmail,
-                      authCode,
                       updatedAt: now.toISOString()
                   };
                   
-                  if (generatedByAI) {
+                  if (generatedByAI && responseText !== "Olá! Recebi sua mensagem, mas estou com uma instabilidade técnica momentânea para processar agora. Por favor, tente novamente em instantes.") {
                       updateData.messages = [
                         ...history, 
                         { role: 'user', text: msg_body }, 

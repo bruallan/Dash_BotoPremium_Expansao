@@ -1853,7 +1853,7 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
         
         if (msg_body) {
             // --- VERIFICAÇÃO DE NÚMEROS PERMITIDOS ---
-            const ALLOWED_NUMBERS = ['5575998301466', '5517996658857'];
+            const ALLOWED_NUMBERS = ['557598301466', '551796658857'];
             const normalizedFrom = from.replace('+', '');
             
             if (!ALLOWED_NUMBERS.includes(normalizedFrom)) {

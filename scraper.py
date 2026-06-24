@@ -49,9 +49,14 @@ def main():
         page.fill("input[id='form:login-user-password']", sults_pass)   
         
         # Truque: Simulando a tecla "Enter" no campo de senha para fazer login
-        page.press("input[id='form:login-user-password']", "Enter")
+        try:
+            with page.expect_navigation(timeout=60000):
+                page.press("input[id='form:login-user-password']", "Enter")
+        except Exception as e:
+            print(f"Erro ao aguardar navegação pós-login: {e}")
+            print(page.content()[:1000]) # imprime parte do HTML para debug
         
-        page.wait_for_load_state('networkidle')
+        print("Acessando grid de pessoas...")
         page.goto("https://botopremium.sults.com.br/pessoa/grid/0/1")
 
         # ==========================================
@@ -60,7 +65,13 @@ def main():
         tem_proxima_pagina = True
 
         while tem_proxima_pagina:
-            page.wait_for_selector("table")
+            try:
+                page.wait_for_selector("table", timeout=60000)
+            except Exception as e:
+                print(f"Erro ao aguardar tabela: {e}")
+                print(page.content()[:1000]) # imprime parte do HTML para debug
+                break
+
             time.sleep(3) # Uma pausa de 3 segundos para garantir que a tabela carregou completamente
             
             linhas = page.query_selector_all("table tbody tr")

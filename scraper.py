@@ -62,7 +62,10 @@ def main():
                 pass
         
         print("Acessando grid de pessoas...")
-        page.goto("https://botopremium.sults.com.br/pessoa/grid/0/1")
+        try:
+            page.goto("https://botopremium.sults.com.br/pessoa/grid/0/1", wait_until="domcontentloaded", timeout=60000)
+        except Exception as e:
+            print(f"Erro no goto grid: {e}")
 
         # ==========================================
         # 4. Loop de Paginação e Extração

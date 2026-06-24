@@ -2278,6 +2278,24 @@ async function startServer() {
     }
   });
 
+  // Cron Job RH - Web Scraper Playwright (Atualiza diariamente as 04:00)
+  cron.schedule('0 4 * * *', () => {
+    console.log('[CRON RH] Iniciando web scraper de colaboradores...');
+    const { exec } = require('child_process');
+    
+    // Executa o script python (certifique-se de que python/playwright estão no ambiente do servidor)
+    exec('python3 scraper.py', (error: any, stdout: string, stderr: string) => {
+      if (error) {
+        console.error(`[CRON RH] Erro de execução do Scraper: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        console.error(`[CRON RH] Scraper stderr: ${stderr}`);
+      }
+      console.log(`[CRON RH] Resultado do Scraper:\n${stdout}`);
+    });
+  });
+
   // Na Vercel, o processo de inicializaÃ§Ãƒo Ã© diferente.
 // ==========================================
 // AGENT API ROUTES

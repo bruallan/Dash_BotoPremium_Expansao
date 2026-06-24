@@ -3,6 +3,10 @@ import time
 import uuid
 from playwright.sync_api import sync_playwright
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Carrega as variáveis de ambiente do arquivo .env (caso executado localmente)
+load_dotenv()
 
 # ==========================================
 # 1. Configurações Iniciais e Credenciais

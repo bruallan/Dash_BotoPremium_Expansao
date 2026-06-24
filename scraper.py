@@ -72,8 +72,8 @@ def main():
 
         print("Clicando no botão Exportar Colaboradores...")
         # A div do card com ícone mdi-account
-        page.wait_for_selector("div.card-export:has(div.mdi-account)", timeout=15000)
-        page.locator("div.card-export:has(div.mdi-account)").click()
+        page.wait_for_selector("div.card-export[onclick*='exportPessoaDialogWVar']", timeout=15000)
+        page.locator("div.card-export[onclick*='exportPessoaDialogWVar']").click()
         
         print("Aguardando download da planilha...")
         with page.expect_download(timeout=120000) as download_info:

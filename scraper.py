@@ -78,10 +78,17 @@ def main():
                 print("HTML Structure da página atual:")
                 html_cards = page.evaluate("""
                     () => {
-                        // Tenta encontrar elementos de lista ou grid
-                        let items = document.querySelectorAll('.ui-dataview-row, .ui-datagrid-row, .ui-card, li, .card');
-                        if (items.length > 0) return items[0].outerHTML + '\\n' + (items[1] ? items[1].outerHTML : '');
-                        return document.body.innerHTML.substring(0, 3000);
+                        // Find an element containing an email
+                        const allElements = document.querySelectorAll('*');
+                        for (let el of allElements) {
+                            if (el.innerText && el.innerText.includes('@botopremium.com.br') && el.children.length === 0) {
+                                // Found a text node with email, let's get its parent container
+                                let parent = el.parentElement;
+                                for (let i=0; i<4; i++) { if (parent.parentElement) parent = parent.parentElement; }
+                                return 'Encontrado email na estrutura:\\n' + parent.outerHTML;
+                            }
+                        }
+                        return 'Email não encontrado. HTML body: ' + document.body.innerHTML.substring(0, 1000);
                     }
                 """)
                 print(html_cards)

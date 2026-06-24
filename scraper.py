@@ -70,16 +70,29 @@ def main():
         tem_proxima_pagina = True
 
         while tem_proxima_pagina:
+            page.wait_for_load_state('networkidle')
+            time.sleep(5)
+            
             try:
-                page.wait_for_selector("table", timeout=30000)
+                # Vamos tentar ver o HTML dos primeiros itens da lista para entender a estrutura
+                print("HTML Structure da página atual:")
+                html_cards = page.evaluate("""
+                    () => {
+                        // Tenta encontrar elementos de lista ou grid
+                        let items = document.querySelectorAll('.ui-dataview-row, .ui-datagrid-row, .ui-card, li, .card');
+                        if (items.length > 0) return items[0].outerHTML + '\\n' + (items[1] ? items[1].outerHTML : '');
+                        return document.body.innerHTML.substring(0, 3000);
+                    }
+                """)
+                print(html_cards)
+            except Exception as e:
+                print("Erro ao extrair HTML:", e)
+                break
+                
+            try:
+                page.wait_for_selector("table", timeout=5000)
             except Exception as e:
                 print(f"Erro ao aguardar tabela: {e}")
-                print(f"URL atual: {page.url}")
-                try:
-                    print("Texto da tela atual:")
-                    print(page.evaluate("document.body.innerText")[:2000])
-                except:
-                    pass
                 break
 
             time.sleep(3) # Uma pausa de 3 segundos para garantir que a tabela carregou completamente

@@ -134,7 +134,6 @@ def main():
             if email in usuarios_banco:
                 id_existente = usuarios_banco[email]["id"]
                 dados_atualizacao = {
-                    "id": colab_id, # Caso o banco permita atualizar a PK
                     "nome_colaborador": nome,
                     "celular": celular,
                     "cargo": cargo, 
@@ -143,12 +142,11 @@ def main():
                 try:
                     supabase.table("colaboradores").update(dados_atualizacao).eq("id", id_existente).execute()
                 except Exception as e:
-                    # Se falhar porque id não pode ser alterado, tenta atualizar sem alterar o id
-                    dados_atualizacao.pop("id")
-                    supabase.table("colaboradores").update(dados_atualizacao).eq("id", id_existente).execute()
+                    print(f"Erro ao atualizar {nome}: {e}")
             else:
+                novo_id = str(uuid.uuid4())
                 dados_insercao = {
-                    "id": colab_id,
+                    "id": novo_id,
                     "nome_colaborador": nome,
                     "celular": celular,
                     "email": email,
@@ -157,7 +155,7 @@ def main():
                 }
                 try:
                     supabase.table("colaboradores").insert(dados_insercao).execute()
-                    usuarios_banco[email] = {"id": colab_id, "status": "ativo"}
+                    usuarios_banco[email] = {"id": novo_id, "status": "ativo"}
                 except Exception as e:
                     print(f"Erro ao inserir {nome}: {e}")
 

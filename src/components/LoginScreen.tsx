@@ -109,88 +109,91 @@ export const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }
     };
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 selection:bg-amber-100 selection:text-amber-900">
-            <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8">
-                <div className="flex flex-col items-center mb-8">
-                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 mb-4 overflow-hidden">
-                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
+        <div className="min-h-screen bg-[#FDFBF7] bg-watermark flex flex-col items-center justify-center p-4 selection:bg-[#E3C78B]/30 selection:text-[#4A423D] font-sans">
+            <div className="bg-white/80 backdrop-blur-md p-8 md:p-10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100/50 w-full max-w-[420px] animate-in fade-in slide-in-from-bottom-4 duration-700 mb-8 relative overflow-hidden">
+                <div className="flex flex-col items-center mb-8 relative z-10">
+                    <div className="w-20 h-20 mb-6 flex items-center justify-center">
+                        <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain drop-shadow-md" referrerPolicy="no-referrer" />
                     </div>
-                    <h1 className="text-2xl font-black tracking-tight text-gray-900 text-center uppercase leading-tight">Painel de Controle Estratégico</h1>
+                    <h1 className="text-[11px] font-display font-medium tracking-[0.3em] text-[#4A423D] text-center uppercase leading-tight">Painel de Controle Estratégico</h1>
                 </div>
 
-                <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-xl">
+                <div className="flex gap-2 mb-8 p-1.5 bg-[#F9F8F6] rounded-xl relative z-10">
                     <button 
                         onClick={() => { setLoginMode('admin'); setError(''); setCodeSent(false); }}
-                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${loginMode === 'admin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-2.5 text-[13px] font-medium rounded-lg transition-all duration-300 ${loginMode === 'admin' ? 'bg-white text-[#C19A5B] shadow-[0_2px_10px_rgb(0,0,0,0.02)] ring-1 ring-black/5 font-semibold' : 'text-[#8A827D] hover:text-[#4A423D]'}`}
                     >
                         Equipe Interna
                     </button>
                     <button 
                         onClick={() => { setLoginMode('franchisee'); setError(''); }}
-                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${loginMode === 'franchisee' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-2.5 text-[13px] font-medium rounded-lg transition-all duration-300 ${loginMode === 'franchisee' ? 'bg-white text-[#C19A5B] shadow-[0_2px_10px_rgb(0,0,0,0.02)] ring-1 ring-black/5 font-semibold' : 'text-[#8A827D] hover:text-[#4A423D]'}`}
                     >
                         Franqueado
                     </button>
                 </div>
 
                 {loginMode === 'admin' ? (
-                    <form onSubmit={handleSubmitAdmin} className="space-y-5">
+                    <form onSubmit={handleSubmitAdmin} className="space-y-6 relative z-10">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Usuário</label>
+                            <label className="block text-[13px] text-[#8A827D] mb-1.5 ml-1">Usuário</label>
                             <input 
                                 type="text" 
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
-                                placeholder="admin"
+                                className="w-full bg-[#FDFBF7] text-[#4A423D] font-medium border-b border-gray-200 focus:border-[#C19A5B] block p-3 outline-none transition-colors rounded-t-xl"
+                                placeholder="Seu usuário"
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Senha</label>
+                            <label className="block text-[13px] text-[#8A827D] mb-1.5 ml-1">Senha</label>
                             <input 
                                 type="password" 
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
-                                placeholder="••••••"
+                                className="w-full bg-[#FDFBF7] text-[#4A423D] font-medium border-b border-gray-200 focus:border-[#C19A5B] block p-3 outline-none transition-colors rounded-t-xl"
+                                placeholder="••••••••"
                                 required
                             />
                         </div>
                         
-                        {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
+                        {error && <p className="text-sm text-red-500 font-medium text-center">{error}</p>}
 
                         <button 
                             type="submit" 
-                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4"
+                            className="w-full bg-gradient-to-r from-[#C19A5B] to-[#E3C78B] hover:opacity-90 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-[#C19A5B]/30 transition-all flex items-center justify-center gap-2 mt-6 active:scale-[0.98]"
                         >
-                            <LogIn className="w-5 h-5" /> Entrar no Dashboard
+                            Entrar <LogIn className="w-4 h-4 ml-1" />
                         </button>
                     </form>
                 ) : (
-                    <form onSubmit={codeSent ? handleVerifyCode : handleSendCode} className="space-y-5">
+                    <form onSubmit={codeSent ? handleVerifyCode : handleSendCode} className="space-y-6 relative z-10">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email do Franqueado</label>
+                            <label className="block text-[13px] text-[#8A827D] mb-1.5 ml-1">Email do Franqueado</label>
                             <input 
                                 type="email" 
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 disabled={codeSent || loadingAction}
-                                className="w-full bg-gray-50 border border-gray-200 text-gray-800 font-medium rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all disabled:opacity-50"
+                                className="w-full bg-[#FDFBF7] text-[#4A423D] font-medium border-b border-gray-200 focus:border-[#C19A5B] block p-3 outline-none transition-colors rounded-t-xl disabled:opacity-50"
                                 placeholder="franqueado@botopremium.com.br"
                                 required
                             />
                         </div>
                         
                         {codeSent && (
-                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Código de Verificação <span className="text-xs text-amber-500 font-normal lowercase">(enviado ao seu email)</span></label>
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 mt-6">
+                                <label className="block text-[13px] text-[#8A827D] mb-1.5 ml-1 flex justify-between">
+                                    <span>Código de Verificação</span>
+                                    <span className="text-[11px] text-[#C19A5B]">Verifique seu email</span>
+                                </label>
                                 <input 
                                     type="text" 
                                     value={code}
                                     onChange={(e) => setCode(e.target.value)}
                                     disabled={loadingAction}
-                                    className="w-full bg-amber-50 border border-amber-200 text-amber-900 font-bold tracking-[0.2em] text-center rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-amber-400 block p-3 outline-none transition-all"
+                                    className="w-full bg-[#FDFBF7] text-[#4A423D] font-medium border-b border-[#C19A5B] focus:bg-white block p-3 outline-none transition-colors rounded-t-xl text-center tracking-[0.3em]"
                                     placeholder="000000"
                                     maxLength={6}
                                     required
@@ -198,20 +201,20 @@ export const LoginScreen = ({ onLogin }: { onLogin: (username: string) => void }
                             </div>
                         )}
                         
-                        {error && <p className="text-sm text-red-500 font-bold text-center">{error}</p>}
+                        {error && <p className="text-sm text-red-500 font-medium text-center">{error}</p>}
 
                         <button 
                             type="submit" 
                             disabled={loadingAction}
-                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-70"
+                            className="w-full bg-gradient-to-r from-[#C19A5B] to-[#E3C78B] hover:opacity-90 disabled:opacity-70 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg shadow-[#C19A5B]/30 transition-all flex items-center justify-center gap-2 mt-6 active:scale-[0.98]"
                         >
-                            {loadingAction ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />} 
+                            {loadingAction ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4 ml-1" />} 
                             {codeSent ? 'Verificar e Entrar' : 'Receber Código'}
                         </button>
                         
                         {codeSent && (
-                           <button type="button" onClick={() => setCodeSent(false)} className="w-full text-sm font-bold text-amber-600 hover:text-amber-700 mt-2 text-center" disabled={loadingAction}>
-                             Alterar email
+                           <button type="button" onClick={() => setCodeSent(false)} className="w-full text-[13px] font-medium text-[#C19A5B] hover:text-[#AA7C11] mt-4 text-center transition-colors" disabled={loadingAction}>
+                             Voltar ao email
                            </button>
                         )}
                     </form>

@@ -8,7 +8,7 @@ import { differenceInDays, subMonths, isAfter, startOfMonth, parseISO } from 'da
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
+export const FinanceiroDashboard = ({ onBack }: { onBack?: () => void }) => {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [error, setError] = useState('');
@@ -273,21 +273,21 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
     
     // --- Renderização Principal ---
     if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="w-10 h-10 animate-spin text-amber-500" /></div>;
+        return <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7] bg-watermark"><Loader2 className="w-10 h-10 animate-spin text-[#C19A5B]" /></div>;
     }
 
     if (error || !data) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 gap-6">
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#FDFBF7] bg-watermark p-6 gap-6">
                 <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center max-w-md w-full gap-4">
-                    <AlertTriangle className="w-12 h-12 text-amber-500" />
-                    <h2 className="text-xl font-black text-gray-900">Dashboard Vazio</h2>
+                    <AlertTriangle className="w-12 h-12 text-[#C19A5B]" />
+                    <h2 className="text-xl font-black text-[#4A423D]">Dashboard Vazio</h2>
                     <p className="text-gray-500 font-medium">{error}</p>
                     
                     <button 
                         onClick={handleForceSync}
                         disabled={isSyncing}
-                        className="mt-2 w-full bg-amber-500 px-4 py-3 rounded-xl text-white font-bold text-sm flex justify-center items-center gap-2 hover:bg-amber-600 transition-colors disabled:opacity-50"
+                        className="mt-2 w-full bg-[#C19A5B] px-4 py-3 rounded-xl text-white font-bold text-sm flex justify-center items-center gap-2 hover:bg-amber-600 transition-colors disabled:opacity-50"
                     >
                         <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
                         {isSyncing ? 'Sincronizando (aprox. 1 min)...' : 'Sincronizar Dados Agora'}
@@ -312,18 +312,18 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
     ];
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] p-4 md:p-8 w-full font-sans selection:bg-amber-100 selection:text-amber-900">
+        <div className="min-h-screen bg-[#FDFBF7] bg-watermark p-4 md:p-8 w-full font-sans selection:bg-[#E3C78B]/30 selection:text-[#4A423D]">
             <div className="max-w-[1600px] mx-auto w-full">
                 
                 {/* Header */}
                 <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6">
                     <div className="flex items-center gap-4 w-full xl:w-auto">
-                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-600/30 border border-amber-400/50 overflow-hidden shrink-0">
+                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[0_8px_30px_rgb(193,154,91,0.2)] border border-[#C19A5B]/30 overflow-hidden shrink-0">
                             <img src="https://caase.com.br/uploads/agreements/filename/image_7376bc2cbd1d570e.png" alt="Logo" className="w-full h-full object-contain p-1.5" referrerPolicy="no-referrer" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black tracking-tight text-gray-900 leading-none mb-1">FINANCEIRO</h1>
-                            <p className="text-[10px] text-amber-600 font-extrabold uppercase tracking-[0.2em] leading-none">Painel de Controle Estratégico</p>
+                            <h1 className="text-2xl font-display font-medium tracking-[0.05em] text-[#4A423D] leading-none mb-1">FINANCEIRO</h1>
+                            <p className="text-[10px] text-[#C19A5B] font-extrabold uppercase tracking-[0.2em] leading-none">Painel de Controle Estratégico</p>
                         </div>
                     </div>
 
@@ -335,8 +335,8 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 text-sm font-bold transition-all duration-300 ${
                                         activeTab === tab.id 
-                                            ? 'bg-gradient-to-r from-amber-500 to-amber-550 text-white px-6 py-2.5 rounded-2xl shadow-md shadow-amber-500/30' 
-                                            : 'text-gray-500 hover:text-amber-600'
+                                            ? 'bg-gradient-to-r from-amber-500 to-amber-550 text-white px-6 py-2.5 rounded-2xl shadow-md shadow-[0_8px_30px_rgb(193,154,91,0.2)]' 
+                                            : 'text-gray-500 hover:text-[#C19A5B]'
                                     }`}
                                 >
                                     <tab.icon className="w-4 h-4 shrink-0" />
@@ -346,7 +346,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                             {onBack && (
                                 <button 
                                     onClick={onBack}
-                                    className="flex items-center justify-center gap-2 text-sm font-bold text-gray-400 hover:text-amber-600 transition-all duration-300 shrink-0 ml-2"
+                                    className="flex items-center justify-center gap-2 text-sm font-bold text-gray-400 hover:text-[#C19A5B] transition-all duration-300 shrink-0 ml-2"
                                     title="Voltar aos Setores"
                                 >
                                     <ArrowLeft className="w-5 h-5" />
@@ -359,7 +359,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                 {/* Filters */}
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mb-8 flex flex-col md:flex-row gap-6 items-center justify-between">
                     <div className="flex items-center gap-3 w-full md:w-auto flex-wrap md:flex-nowrap">
-                        <div className="bg-amber-50 p-2 rounded-lg hidden md:block"><Filter className="w-5 h-5 text-amber-600" /></div>
+                        <div className="bg-amber-50 p-2 rounded-lg hidden md:block"><Filter className="w-5 h-5 text-[#C19A5B]" /></div>
                         
                         <div className="flex items-center gap-2 min-w-max">
                             <strong className="text-xs font-bold text-gray-400 uppercase tracking-wider">Período:</strong>
@@ -367,20 +367,20 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                                 type="date" 
                                 value={filterStartDate} 
                                 onChange={e => setFilterStartDate(e.target.value)} 
-                                className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-amber-400 focus:border-amber-400 transition-all shadow-sm"
+                                className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-[#C19A5B] focus:border-[#C19A5B] transition-all shadow-sm"
                             />
                             <span className="text-gray-400">até</span>
                             <input 
                                 type="date" 
                                 value={filterEndDate} 
                                 onChange={e => setFilterEndDate(e.target.value)} 
-                                className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-amber-400 focus:border-amber-400 transition-all shadow-sm"
+                                className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-[#C19A5B] focus:border-[#C19A5B] transition-all shadow-sm"
                             />
                         </div>
                         
                         <div className="flex items-center gap-2 min-w-max">
                             <strong className="text-xs font-bold text-gray-400 uppercase tracking-wider">C.Custo:</strong>
-                            <select value={filterCC} onChange={e => setFilterCC(e.target.value)} className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-amber-400 focus:border-amber-400 transition-all shadow-sm">
+                            <select value={filterCC} onChange={e => setFilterCC(e.target.value)} className="bg-white border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 outline-none hover:border-[#C19A5B] focus:border-[#C19A5B] transition-all shadow-sm">
                                 <option value="ALL">Todos C.Custo</option>
                                 {availableCC.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
@@ -403,11 +403,11 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Saldo em Caixa Atual</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(saldoCaixaAtual)}</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{formatCurrency(saldoCaixaAtual)}</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Receita Bruta (Filtro)</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(metrics.recBrutaTotal)}</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{formatCurrency(metrics.recBrutaTotal)}</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">EBITDA (Filtro)</p>
@@ -415,7 +415,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Runway (Sobrevida)</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{metrics.runway.toFixed(1)} Meses</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{metrics.runway.toFixed(1)} Meses</p>
                                 <p className="text-[10px] uppercase text-gray-400 mt-1">Base: 3 Meses</p>
                             </div>
                         </div>
@@ -462,7 +462,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Royalties Faturados</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(metrics.royaltiesFat)}</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{formatCurrency(metrics.royaltiesFat)}</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Royalties Recebidos</p>
@@ -474,14 +474,14 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Supply & Rebates</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(metrics.supplyRec)}</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{formatCurrency(metrics.supplyRec)}</p>
                             </div>
                         </div>
                         <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                             <h3 className="text-sm font-bold text-gray-800 mb-2 uppercase">Execução do FPP</h3>
                             <div className="w-full bg-gray-100 rounded-full h-8 overflow-hidden relative">
                                 <div className="bg-blue-500 h-8 transition-all" style={{ width: `${Math.min(metrics.execucaoFpp, 100)}%` }}></div>
-                                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-900 drop-shadow-sm">{metrics.execucaoFpp.toFixed(1)}% do orçamento de FPP investido</span>
+                                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-[#4A423D] drop-shadow-sm">{metrics.execucaoFpp.toFixed(1)}% do orçamento de FPP investido</span>
                             </div>
                         </div>
                     </div>
@@ -542,7 +542,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                                     {Object.entries(metrics.agingMap).map(([faixa, valor]) => (
                                         <div key={faixa} className="flex justify-between items-center text-sm">
                                             <span className="font-bold text-gray-500">{faixa} dias</span>
-                                            <span className="font-black text-gray-900">{formatCurrency(valor as number)}</span>
+                                            <span className="font-black text-[#4A423D]">{formatCurrency(valor as number)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -591,7 +591,7 @@ export const FinancialSector = ({ onBack }: { onBack?: () => void }) => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Receita Expansão (Taxa Franq)</p>
-                                <p className="text-2xl font-black text-gray-900 mt-1">{formatCurrency(metrics.txFranquiaExp)}</p>
+                                <p className="text-2xl font-black text-[#4A423D] mt-1">{formatCurrency(metrics.txFranquiaExp)}</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                 <p className="text-xs font-bold text-gray-500 uppercase">Ticket M. Novas Unidades (6m)</p>

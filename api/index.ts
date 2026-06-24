@@ -6,6 +6,15 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (supabaseUrl && supabaseUrl !== 'YOUR_SUPABASE_URL' && supabaseKey && supabaseKey !== 'YOUR_SUPABASE_SERVICE_ROLE_KEY') 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null;
+
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
@@ -321,6 +330,29 @@ export async function getStoredTokens(): Promise<{ access_token?: string; refres
     };
   }
 
+  // --- NEW LOGIC: Try Supabase ---
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('api_credentials')
+        .select('access_token, refresh_token')
+        .eq('provider', 'conta_azul')
+        .single();
+        
+      if (!error && data) {
+        (global as any).lastTokenFetchTime = Date.now();
+        currentAccessToken = data.access_token;
+        currentRefreshToken = data.refresh_token;
+        return {
+           access_token: data.access_token || undefined,
+           refresh_token: data.refresh_token || undefined
+        };
+      }
+    } catch (e: any) {
+      console.error("Erro ao ler tokens do Supabase:", e.message);
+    }
+  }
+
   if (!db) {
     if (currentAccessToken || currentRefreshToken) {
       return {
@@ -427,7 +459,32 @@ async function saveTokens(accessToken: string, refreshToken: string) {
   // Send email notification (don't block the main flow, but log if it fails)
   sendEmailNotification(accessToken, refreshToken).catch(console.error);
 
-  let success = false;
+  let successSupabase = false;
+
+  // --- NEW LOGIC: Save to Supabase ---
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('api_credentials')
+        .update({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          updated_at: new Date().toISOString()
+        })
+        .eq('provider', 'conta_azul');
+        
+      if (!error) {
+        console.log("Tokens saved successfully to Supabase.");
+        successSupabase = true;
+      } else {
+        console.error("Failed to save tokens to Supabase:", error);
+      }
+    } catch (e) {
+      console.error("Exception saving tokens to Supabase:", e);
+    }
+  }
+
+  let success = successSupabase;
   let attempts = 0;
   const maxAttempts = 5;
 
@@ -455,12 +512,12 @@ async function saveTokens(accessToken: string, refreshToken: string) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
       }
     } catch (e) {
-      console.error(`Attempt ${attempts}: Error saving tokens to Redis:`, e);
+      console.error(`Attempt ${attempts}: Error saving tokens:`, e);
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
 
-  if (!success) {
+  if (!success && !successSupabase) {
     console.error("CRITICAL: FAILED TO SAVE TOKENS AFTER ALL ATTEMPTS.");
     // We already sent the email, so the user has the token there as a backup.
   }
@@ -675,14 +732,6 @@ export async function fetchAllPages(
     const totalItems = firstPageData.itens_totais || 0;
     let totalPages = Math.ceil(totalItems / TAMANHO_PAGINA);
 
-    // TRAVA DE SEGURANÇA VERCEL: 
-    // Limitamos a no máximo 12 páginas (600 itens) por requisição.
-    // Isso garante que o tempo total de processamento não passe de ~8 segundos (Vercel corta em 10s).
-    if (totalPages > 12) {
-      console.warn(`Limitando paginação de ${totalPages} para 12 páginas para evitar timeout da Vercel.`);
-      totalPages = 12;
-    }
-
     if (totalPages > 1) {
       const remainingPages = [];
       for (let p = 2; p <= totalPages; p++) {
@@ -736,10 +785,10 @@ export async function getContasReceber(
   const ate = dataVencimentoAte.split('T')[0];
 
   return fetchAllPages(
-    "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
+    "/v1/financeiro/contas-receber",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      vencimento_de: de,
+      vencimento_ate: ate,
     },
     signal,
   );
@@ -754,10 +803,10 @@ export async function getContasPagar(
   const ate = dataVencimentoAte.split('T')[0];
 
   return fetchAllPages(
-    "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
+    "/v1/financeiro/contas-pagar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      vencimento_de: de,
+      vencimento_ate: ate,
     },
     signal,
   );
@@ -774,10 +823,10 @@ export async function getContasReceberPage(
 
   return request(
     "GET",
-    "/v1/financeiro/eventos-financeiros/contas-a-receber/buscar",
+    "/v1/financeiro/contas-receber",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      vencimento_de: de,
+      vencimento_ate: ate,
       pagina: page,
       tamanho_pagina: 50
     },
@@ -796,10 +845,10 @@ export async function getContasPagarPage(
 
   return request(
     "GET",
-    "/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar",
+    "/v1/financeiro/contas-pagar",
     {
-      data_vencimento_de: de,
-      data_vencimento_ate: ate,
+      vencimento_de: de,
+      vencimento_ate: ate,
       pagina: page,
       tamanho_pagina: 50
     },
@@ -897,27 +946,95 @@ app.get("/api/debug/check-token", async (req, res) => {
 });
 
 app.all("/api/sync-data", async (req, res) => {
+  const executionLog: string[] = [];
+  const logEvent = (msg: string) => {
+    console.log(`[SYNC] ${msg}`);
+    executionLog.push(`[${new Date().toISOString()}] ${msg}`);
+  };
+
   try {
+    logEvent("Iniciando sincronização forçada via API...");
     const minDate = "2025-01-01";
     const maxDate = new Date().toISOString().split("T")[0]; // today
 
     // Fetch RD Station
+    logEvent("Buscando dados do RD Station...");
     const rdData = await getDashboardData(minDate, maxDate);
+    logEvent(`Dados RD Station carregados: ${rdData.leads_totais || 0} leads totais.`);
 
     // Fetch Conta Azul (Receber e Pagar)
+    logEvent("Buscando Contas a Receber (Conta Azul)...");
     const contasReceber = await getContasReceber(minDate, maxDate);
+    logEvent(`Contas a Receber carregadas: ${contasReceber?.length || 0} registros.`);
+
+    logEvent("Buscando Contas a Pagar (Conta Azul)...");
     const contasPagar = await getContasPagar(minDate, maxDate);
+    logEvent(`Contas a Pagar carregadas: ${contasPagar?.length || 0} registros.`);
 
     // Save RD Data
     if (db) {
+      logEvent("Salvando dados no cache do Firebase...");
       await setDoc(doc(db, "cache", "rdData"), { data: rdData, updated_at: new Date().toISOString() });
       
-      // Save CA chunked
+      // Save CA
       await setDoc(doc(db, "cache", "caReceber"), { data: contasReceber, updated_at: new Date().toISOString() });
       await setDoc(doc(db, "cache", "caPagar"), { data: contasPagar, updated_at: new Date().toISOString() });
+      logEvent("Cache atualizado com sucesso no Firebase.");
+    } else {
+      logEvent("Aviso: Firebase DB não conectado. Cache ignorado.");
     }
 
+    logEvent("Sincronização concluída com sucesso.");
     res.json({ success: true, message: "Sincronização concluída com sucesso." });
+  } catch (e: any) {
+    logEvent(`ERRO durante a sincronização: ${e.message}`);
+    res.status(500).json({ success: false, error: e.message });
+  } finally {
+    // Send email with log
+    try {
+      const { EMAIL_USER, EMAIL_PASS } = process.env;
+      if (EMAIL_USER && EMAIL_PASS) {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: EMAIL_USER,
+            pass: EMAIL_PASS,
+          },
+        });
+        
+        await transporter.sendMail({
+          from: EMAIL_USER,
+          to: "brunoallan004@gmail.com",
+          subject: "Log de Sincronização de Dados API",
+          text: executionLog.join("\n"),
+        });
+        console.log("E-mail de log enviado com sucesso para brunoallan004@gmail.com");
+      } else {
+        console.warn("EMAIL_USER e EMAIL_PASS não estão definidos. E-mail de log não enviado.");
+      }
+    } catch (mailError) {
+      console.error("Erro ao enviar e-mail de log:", mailError);
+    }
+  }
+});
+
+app.get("/api/debug/cache", async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ success: false, error: "Firebase DB not connected" });
+    
+    let cacheContent = {};
+    const docsToFetch = ["rdData", "caReceber", "caPagar"];
+    
+    for (const d of docsToFetch) {
+      try {
+        const docSnap = await getDoc(doc(db, "cache", d));
+        if (docSnap.exists()) {
+          cacheContent[d] = docSnap.data();
+        }
+      } catch (err) {}
+    }
+    
+    res.json({ success: true, data: cacheContent });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }

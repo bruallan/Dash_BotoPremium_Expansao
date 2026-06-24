@@ -1,4 +1,5 @@
 import { subMonths } from 'date-fns';
+import nodemailer from 'nodemailer';
 
 export async function runFinanceCron(
     requestFn: any, 
@@ -7,7 +8,13 @@ export async function runFinanceCron(
     setDocFn: any, 
     docFn: any
 ) {
-    console.log('[CRON FINANCEIRO] Iniciando processamento financeiro...');
+    const executionLogs: string[] = [];
+    const logEvent = (msg: string) => {
+        console.log(`[CRON FINANCEIRO] ${msg}`);
+        executionLogs.push(`[${new Date().toISOString()}] ${msg}`);
+    };
+
+    logEvent('Iniciando processamento financeiro...');
     
     try {
         const currentDate = new Date();
@@ -32,41 +39,56 @@ export async function runFinanceCron(
             }
         } catch (e: any) {
             if (e.response?.status !== 404) {
-               console.error("[CRON FINANCEIRO] Erro ao buscar contas:", e.message);
+               logEvent(`Erro ao buscar contas: ${e.message}`);
             }
         }
 
-        const contasReceber = await fetchAllPagesFn("/v1/financeiro/eventos-financeiros/contas-a-receber/buscar", {
-            data_vencimento_de: minDate,
-            data_vencimento_ate: maxDate,
+        logEvent('Buscando Contas a Receber...');
+        const contasReceber = await fetchAllPagesFn("/v1/financeiro/contas-receber", {
+            vencimento_de: minDate,
+            vencimento_ate: maxDate,
         });
+        logEvent(`Contas a Receber carregadas: ${contasReceber?.length || 0} registros.`);
 
-        const contasPagar = await fetchAllPagesFn("/v1/financeiro/eventos-financeiros/contas-a-pagar/buscar", {
-            data_vencimento_de: minDate,
-            data_vencimento_ate: maxDate,
+        logEvent('Buscando Contas a Pagar...');
+        const contasPagar = await fetchAllPagesFn("/v1/financeiro/contas-pagar", {
+            vencimento_de: minDate,
+            vencimento_ate: maxDate,
         });
+        logEvent(`Contas a Pagar carregadas: ${contasPagar?.length || 0} registros.`);
 
         let contratos: any[] = [];
         try {
             contratos = await fetchAllPagesFn("/v1/contratos", {});
+            logEvent(`Contratos carregados: ${contratos?.length || 0} registros.`);
         } catch (e) {
-            console.error("[CRON FINANCEIRO] Erro contratos:", e);
+            logEvent(`Erro contratos: ${e}`);
         }
 
         // Simplificar cada item para caber no limite do Firestore
         const mapEvento = (e: any, tipo: "RECEITA" | "DESPESA") => {
             const rawTotal = e.total !== undefined ? e.total : (e.valor !== undefined ? e.valor : 0);
-            const rawPago = e.pago !== undefined ? e.pago : (e.valor_pago !== undefined ? e.valor_pago : (e.status === 'RECEBIDO' || e.status === 'PAGO' ? rawTotal : 0));
-            const rawNaoPago = e.nao_pago !== undefined ? e.nao_pago : (e.status === 'PENDENTE' || e.status === 'ATRASADO' ? rawTotal : 0);
+            
+            // Normalize status based on original, translated, or mapped
+            let normalizedStatus = (e.status_traduzido || e.status || "PENDENTE").toUpperCase();
+            if (e.status === 'ACQUITTED') normalizedStatus = 'RECEBIDO';
+            if (e.status === 'OVERDUE') normalizedStatus = 'ATRASADO';
+            
+            const rawPago = e.pago !== undefined ? e.pago : (e.valor_pago !== undefined ? e.valor_pago : (normalizedStatus === 'RECEBIDO' || normalizedStatus === 'PAGO' ? rawTotal : 0));
+            const rawNaoPago = e.nao_pago !== undefined ? e.nao_pago : (normalizedStatus === 'PENDENTE' || normalizedStatus === 'ATRASADO' ? rawTotal : 0);
+
+            // Tentar descobrir a melhor data para considerar o mês (competência ou pagamento)
+            // Se tiver data_pagamento na original usamos, senao usamos competencia se disponivel pra ajudar, mas por padrao vencimento
+            const dataBase = e.data_vencimento || e.data_competencia || e.data_criacao || null;
 
             return {
                 id: e.id || "N/A",
                 tipo,
-                data_vencimento: e.data_vencimento || null,
+                data_vencimento: dataBase,
                 total: isNaN(parseFloat(rawTotal)) ? 0 : parseFloat(rawTotal),
                 pago: isNaN(parseFloat(rawPago)) ? 0 : parseFloat(rawPago),
                 nao_pago: isNaN(parseFloat(rawNaoPago)) ? 0 : parseFloat(rawNaoPago),
-                status: e.status?.toUpperCase() || "PENDENTE",
+                status: normalizedStatus,
                 categorias: (e.categorias || []).map((c: any) => ({
                     id: c.id || "N/A",
                     nome: c.nome || "N/A"
@@ -103,16 +125,39 @@ export async function runFinanceCron(
         if (dbRef) {
             try {
                 await setDocFn(docFn(dbRef, "dashboards", "financeiro"), payload, { merge: true });
-                console.log('[CRON FINANCEIRO] Dados financeiros salvos com sucesso.');
+                logEvent('Dados financeiros salvos com sucesso.');
             } catch (firestoreErr: any) {
-                console.warn('[CRON FINANCEIRO] Erro ao salvar dados no Firestore, provavelmente limite de cota:', firestoreErr.message);
+                logEvent(`Erro ao salvar dados no Firestore, provavelmente limite de cota: ${firestoreErr.message}`);
             }
         }
 
         return payload;
 
     } catch (err: any) {
-        console.error('[CRON FINANCEIRO] Falha critica:', err.message);
+        logEvent(`Falha critica: ${err.message}`);
         return null;
+    } finally {
+        try {
+            const { EMAIL_USER, EMAIL_PASS } = process.env;
+            if (EMAIL_USER && EMAIL_PASS) {
+                const transporter = nodemailer.createTransport({
+                    service: 'gmail',
+                    auth: {
+                        user: EMAIL_USER,
+                        pass: EMAIL_PASS,
+                    },
+                });
+                
+                await transporter.sendMail({
+                    from: EMAIL_USER,
+                    to: "brunoallan004@gmail.com",
+                    subject: "Log de Sincronizacao Financeira API",
+                    text: executionLogs.join("\n"),
+                });
+                logEvent("E-mail de log enviado com sucesso.");
+            }
+        } catch (mailError: any) {
+            console.error("[CRON FINANCEIRO] Erro ao enviar e-mail de log:", mailError.message);
+        }
     }
 }

@@ -78,7 +78,7 @@ def main():
         print("Aguardando download da planilha...")
         with page.expect_download(timeout=120000) as download_info:
             page.wait_for_selector("button[onclick*='PrimeFaces.monitorDownload']", timeout=15000)
-            page.locator("button[onclick*='PrimeFaces.monitorDownload']").click()
+            page.locator("button[onclick*='PrimeFaces.monitorDownload']").first.click()
             
         download = download_info.value
         download_path = download.path()

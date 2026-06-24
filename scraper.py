@@ -81,7 +81,8 @@ def main():
             page.locator("button[onclick*='PrimeFaces.monitorDownload']").first.click()
             
         download = download_info.value
-        download_path = download.path()
+        download_path = "Pessoas.xlsx"
+        download.save_as(download_path)
         print(f"Download concluído: {download_path}")
 
         browser.close()

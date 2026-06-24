@@ -50,11 +50,16 @@ def main():
         
         # Truque: Simulando a tecla "Enter" no campo de senha para fazer login
         try:
-            with page.expect_navigation(timeout=60000):
+            with page.expect_navigation(timeout=30000):
                 page.press("input[id='form:login-user-password']", "Enter")
         except Exception as e:
-            print(f"Erro ao aguardar navegação pós-login: {e}")
-            print(page.content()[:1000]) # imprime parte do HTML para debug
+            print(f"Aviso ao aguardar navegação pós-login: {e}")
+            print(f"URL atual: {page.url}")
+            try:
+                print("Texto da tela atual:")
+                print(page.evaluate("document.body.innerText")[:1500])
+            except:
+                pass
         
         print("Acessando grid de pessoas...")
         page.goto("https://botopremium.sults.com.br/pessoa/grid/0/1")
@@ -66,15 +71,21 @@ def main():
 
         while tem_proxima_pagina:
             try:
-                page.wait_for_selector("table", timeout=60000)
+                page.wait_for_selector("table", timeout=30000)
             except Exception as e:
                 print(f"Erro ao aguardar tabela: {e}")
-                print(page.content()[:1000]) # imprime parte do HTML para debug
+                print(f"URL atual: {page.url}")
+                try:
+                    print("Texto da tela atual:")
+                    print(page.evaluate("document.body.innerText")[:2000])
+                except:
+                    pass
                 break
 
             time.sleep(3) # Uma pausa de 3 segundos para garantir que a tabela carregou completamente
             
             linhas = page.query_selector_all("table tbody tr")
+            print(f"Lendo {len(linhas)} linhas na tabela da página atual...")
             
             for linha in linhas:
                 colunas = linha.query_selector_all("td")
@@ -84,6 +95,8 @@ def main():
                     celular = colunas[1].inner_text().strip()
                     email = colunas[2].inner_text().strip()
                     cargo = colunas[3].inner_text().strip()
+                    
+                    print(f"Lido: {nome} | {email} | {cargo}")
 
                     emails_encontrados_no_portal.add(email)
 

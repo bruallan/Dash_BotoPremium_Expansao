@@ -78,48 +78,45 @@ def main():
             
             try:
                 # Vamos tentar ver o HTML dos primeiros itens da lista para entender a estrutura
-                print("HTML Structure da página atual:")
-                html_cards = page.evaluate("""
-                    () => {
-                        // Find an element containing an email
-                        const allElements = document.querySelectorAll('*');
-                        for (let el of allElements) {
-                            if (el.innerText && el.innerText.includes('@botopremium.com.br') && el.children.length === 0) {
-                                // Found a text node with email, let's get its parent container
-                                let parent = el.parentElement;
-                                for (let i=0; i<4; i++) { if (parent.parentElement) parent = parent.parentElement; }
-                                return 'Encontrado email na estrutura:\\n' + parent.outerHTML;
-                            }
-                        }
-                        return 'Email não encontrado. HTML body: ' + document.body.innerHTML.substring(0, 1000);
-                    }
-                """)
-                print(html_cards)
-            except Exception as e:
-                print("Erro ao extrair HTML:", e)
-                break
-                
             try:
-                page.wait_for_selector("table", timeout=5000)
+                page.wait_for_selector(".pessoa-grid-item", timeout=15000)
             except Exception as e:
-                print(f"Erro ao aguardar tabela: {e}")
+                print(f"Erro ao aguardar grid de pessoas: {e}")
                 break
 
-            time.sleep(3) # Uma pausa de 3 segundos para garantir que a tabela carregou completamente
+            time.sleep(2) # Uma pequena pausa para garantir que os itens foram carregados
             
-            linhas = page.query_selector_all("table tbody tr")
-            print(f"Lendo {len(linhas)} linhas na tabela da página atual...")
+            linhas = page.query_selector_all(".pessoa-grid-item")
+            print(f"Lendo {len(linhas)} pessoas na página atual...")
             
-            for linha in linhas:
-                colunas = linha.query_selector_all("td")
-                if len(colunas) >= 4:
-                    # Capturando os dados conforme a ordem da sua imagem
-                    nome = colunas[0].inner_text().strip()
-                    celular = colunas[1].inner_text().strip()
-                    email = colunas[2].inner_text().strip()
-                    cargo = colunas[3].inner_text().strip()
+            for item in linhas:
+                try:
+                    # Nome
+                    nome_el = item.query_selector("h3")
+                    nome = nome_el.inner_text().strip() if nome_el else "Desconhecido"
                     
-                    print(f"Lido: {nome} | {email} | {cargo}")
+                    # Email
+                    email_parent = item.query_selector("i.fa-envelope-o")
+                    email = ""
+                    if email_parent:
+                        email = email_parent.evaluate("el => el.parentElement.innerText").strip()
+                        
+                    # Celular
+                    celular_parent = item.query_selector("i.fa-phone")
+                    celular = ""
+                    if celular_parent:
+                        celular = celular_parent.evaluate("el => el.parentElement.innerText").strip()
+                        
+                    # Cargo
+                    cargo_els = item.query_selector_all(".line-clamp-1")
+                    cargo = " / ".join([c.inner_text().strip() for c in cargo_els]) if cargo_els else ""
+                    
+                    print(f"Lido: {nome} | {email} | {cargo} | {celular}")
+                    
+                    # O email será nossa chave primária, não podemos inserir sem ele
+                    if not email or "@" not in email:
+                        print(f"Ignorando {nome} - Sem email válido ({email})")
+                        continue
 
                     emails_encontrados_no_portal.add(email)
 
@@ -135,7 +132,6 @@ def main():
                             "status": "ativo"
                         }
                         supabase.table("colaboradores").update(dados_atualizacao).eq("id", id_existente).execute()
-                        print(f"Atualizado: {nome}")
                     else:
                         novo_id = str(uuid.uuid4())
                         dados_insercao = {
@@ -149,7 +145,9 @@ def main():
                         supabase.table("colaboradores").insert(dados_insercao).execute()
                         
                         usuarios_banco[email] = {"id": novo_id, "status": "ativo"}
-                        print(f"Novo colaborador criado: {nome}")
+                        
+                except Exception as e:
+                    print(f"Erro ao processar item: {e}")
 
             print("Página lida com sucesso.")
 
